@@ -1,0 +1,24 @@
+# Data files - DO NOT COMMIT
+*.csv
+*.parquet
+*.jsonl
+*.xlsx
+*.pkl
+
+# Output directories
+data/
+output/
+results/
+raw_data/
+models/
+
+# Config files
+config.py
+.env
+secrets/
+
+# Python
+__pycache__/
+*.pyc
+.env
+.pytest_cache
