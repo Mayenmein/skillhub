@@ -17,6 +17,9 @@ from typing import List, Optional
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+import warnings
+warnings.filterwarnings('ignore')
+
 class DataScienceJobsCleaner:
     """
     Clean and preprocess data science job listings from Found.dev API
@@ -110,65 +113,122 @@ class DataScienceJobsCleaner:
       
     def clean_job_type(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Clean and categorize job types.
+        Clean and categorize job types into separate columns.
         Handles multilingual and mixed-format job type fields.
         """
         df_clean = df.copy()
 
         # Define standard mappings (lowercased)
         type_mapping = {
-            'full_time': [
-                'full-time', 'full time', 'permanent', 'regular', 'employee', 'voltijds', 
-                'vollzeit', 'heltid', 'a jornada completa', 'fulltid', 'fuldtid',
-                'pełny etat', 'полная занятость', '全职', 'período integral'
-            ],
-            'part_time': [
-                'part-time', 'part time', 'teilzeit', 'deeltijds', 'meio período', 
-                'чaстичная занятость', 'working student'
-            ],
-            'contract': [
-                'contract', 'freelance', 'temporary', 'fixed term', 'consultant', 
-                'contrat', 'contrato', 'werkvertrag', 'project based', 'fellowship', 
-                'billable', 'fte or 1099', 'limited', 'cdi', 'cdi cadre'
-            ],
+            'job_type': {
+                'full_time': [
+                    'full-time', 'full time', 'permanent', 'regular', 'employee', 'voltijds', 
+                    'vollzeit', 'heltid', 'a jornada completa', 'fulltid', 'fuldtid',
+                    'pełny etat', 'полная занятость', '全职', 'período integral'
+                ],
+                'part_time': [
+                    'part-time', 'part time', 'teilzeit', 'deeltijds', 'meio período', 
+                    'чaстичная занятость', 'working student'
+                ],
+                'contract': [
+                    'contract', 'freelance', 'temporary', 'fixed term', 'consultant', 
+                    'contrat', 'contrato', 'werkvertrag', 'project based', 'fellowship', 
+                    'billable', 'fte or 1099', 'limited', 'cdi', 'cdi cadre'
+                ]
+            },
+            'work_mode': {
+                'remote': [
+                    'remote', 'remoto', 'remoto primeiro', 'full remoto'
+                ],
+                'hybrid': [
+                    'hybrid'
+                ],
+                'onsite': [
+                    'in-office', 'in office', 'in-person', 'office-based', 
+                    'on-site', 'onsite', 'onroll', 'on-roll', 'on-rolls', 'in-office'
+                ]
+            },
             'internship': [
                 'internship', 'intern', 'stage', 'staż', 'stagiair', 'praktikant', 
                 'stagista', 'co-op', 'co op', 'graduate', 'industrial placement',
                 'binance accelerator program', 'apprenticeship', 'thesis', 'training'
-            ],
-            'hybrid': [
-                'hybrid', 'in-office', 'in office', 'in-person', 'office-based', 
-                'on-site', 'onsite', 'onroll', 'on-roll', 'on-rolls', 'in-office'
-            ],
-            'remote': [
-                'remote', 'remoto', 'remoto primeiro', 'full remoto'
             ]
         }
 
-        def standardize_job_type(job_type):
+        def categorize_job_details(job_type):
             if pd.isna(job_type):
-                return ['unknown']
+                return {
+                    'job_type': 'unknown',
+                    'work_mode': 'unknown', 
+                    'is_intern': False
+                }
 
             job_type_lower = str(job_type).lower()
             job_type_lower = re.sub(r'[^a-zA-Z\s,;/-]', ' ', job_type_lower)
             tokens = re.split(r'[,;/]', job_type_lower)
 
-            matched_types = set()
+            # Initialize with NaN/False values
+            result = {
+                'job_type': 'unknown',
+                'work_mode': 'unknown',
+                'is_intern': False
+            }
+
+            # Check for job types
+            job_type_found = False
             for token in tokens:
                 token = token.strip()
-                for category, variants in type_mapping.items():
+                for category, variants in type_mapping['job_type'].items():
                     if any(v in token for v in variants):
-                        matched_types.add(category)
+                        result['job_type'] = category
+                        job_type_found = True
+                        break
+                if job_type_found:
+                    break
 
-            return list(matched_types) if matched_types else ['other']
+            # Check for work modes
+            work_mode_found = False
+            for token in tokens:
+                token = token.strip()
+                for category, variants in type_mapping['work_mode'].items():
+                    if any(v in token for v in variants):
+                        result['work_mode'] = category
+                        work_mode_found = True
+                        break
+                if work_mode_found:
+                    break
 
-        # Apply cleaning
-        df_clean['cleaned_job_type'] = df_clean['type'].apply(standardize_job_type)
+            # Check for internship
+            for token in tokens:
+                token = token.strip()
+                if any(intern_term in token for intern_term in type_mapping['internship']):
+                    result['is_intern'] = True
+                    # If it's an internship and no job type found, set as internship type
+                    if not job_type_found:
+                        result['job_type'] = 'internship'
+                    break
 
-        # Optional: create a simplified primary type (first in list)
-        df_clean['primary_job_type'] = df_clean['cleaned_job_type'].apply(lambda x: x[0] if x else 'other')
+            return result
 
-        logger.info("✅ Job types cleaned and standardized.")
+        # Apply categorization
+        job_details = df_clean['type'].apply(categorize_job_details)
+        
+        # Create separate columns
+        df_clean['job_type'] = job_details.apply(lambda x: x['job_type'])
+        df_clean['work_mode'] = job_details.apply(lambda x: x['work_mode'])
+        df_clean['is_intern'] = job_details.apply(lambda x: x['is_intern'])
+        
+        # Replace 'unknown' with NaN for better handling
+        df_clean['job_type'] = df_clean['job_type'].replace('unknown', np.nan)
+        df_clean['work_mode'] = df_clean['work_mode'].replace('unknown', np.nan)
+
+        # Optional: Keep the original cleaned_job_type for backward compatibility
+        df_clean['cleaned_job_type'] = df_clean['type'].apply(
+            lambda x: ['unknown'] if pd.isna(x) else [str(x).lower()]
+        )
+
+        logger.info("✅ Job types cleaned.") 
+
         return df_clean
     
     def clean_salary_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -324,7 +384,10 @@ class DataScienceJobsCleaner:
             else:
                 return 'Very High (>150k)'
         
-        df_clean['salary_category'] = df_clean['salary_min_usd'].apply(categorize_salary)
+        df_clean['avg_salary_usd'] = df_clean[['salary_min_usd', 'salary_max_usd']].mean(axis=1)
+        df_clean['avg_salary_usd'] = df_clean['avg_salary_usd'].replace(0,np.NAN)
+
+        df_clean['salary_category'] = df_clean['avg_salary_usd'].apply(categorize_salary)
         
         logger.info("✅ Salary data cleaned")
         return df_clean
@@ -347,6 +410,8 @@ class DataScienceJobsCleaner:
         # Extract date components
         df_clean['published_year'] = df_clean['published'].dt.year
         df_clean['published_month'] = df_clean['published'].dt.month
+        
+        df_clean["date"] = df_clean["published_year"].astype(str) + "_" + df_clean["published_month"].astype(str).str.zfill(2)
         
         logger.info("✅ Date data converted")
         return df_clean
@@ -444,23 +509,21 @@ def clean_jobs_data(data_dir: Path = Path("../data"), save_interim: bool = True)
 
 class HybridJobTitleClassifier:
     """
-    Hybrid job title classifier that:
+    Job title classifier that:
     - Uses SentenceTransformer for semantic similarity.
-    - Clusters emerging/unclassified roles.
+    - Classifies titles into predefined categories or marks as 'Other'.
     - Extracts seniority levels.
     - Preserves all original DataFrame columns.
     - Avoids duplicate rows by aligning on index, not title.
     """
 
     def __init__(self,
-                 model_name="all-MiniLM-L6-v2",
-                 threshold=0.45,
-                 cluster_path="role_clusters.pkl",
+                 model_name="all-MiniLM-L6-v2", 
                  category_embeddings_path="categories.pkl"):
 
-        self.model = SentenceTransformer(model_name)
-        self.threshold = threshold
-        self.cluster_path = cluster_path
+        cache_folder = "C:\\Users\\MARIE\\.cache\\huggingface\\hub"
+        self.model = SentenceTransformer(model_name, cache_folder=cache_folder, local_files_only=True)
+         
         self.category_embeddings_path = category_embeddings_path
 
         # Core job role categories
@@ -491,11 +554,6 @@ class HybridJobTitleClassifier:
             (r'\b(vice president|vp|chief|executive|cto|ceo|founder|co-founder)\b', 'Executive')
         ]
 
-        if os.path.exists(cluster_path):
-            self.clusters = joblib.load(cluster_path)
-        else:
-            self.clusters = {}
-
     def extract_seniority(self, title: str) -> str:
         """Extract seniority level using regex."""
         if not title or not isinstance(title, str):
@@ -506,10 +564,11 @@ class HybridJobTitleClassifier:
                 return label
         return "Unspecified"
 
-    def classify_dataframe(self, df: pd.DataFrame, title_col: str, n_clusters: int = 6) -> pd.DataFrame:
+    def classify_dataframe(self, df: pd.DataFrame, title_col: str, threshold =.47) -> pd.DataFrame:
         """
-        Classify job titles and append results to the DataFrame.
-        Returns the same number of rows with 3 new columns.
+        Classify job titles based on semantic similarity to predefined categories.
+        Titles below similarity threshold are marked as 'Other'.
+        Returns same number of rows with 3 new columns.
         """
         df = df.copy()
         titles = df[title_col].fillna("").tolist()
@@ -519,74 +578,42 @@ class HybridJobTitleClassifier:
         similarities = util.cos_sim(title_embeddings, self.category_embeddings)
 
         results = []
-        residuals, residual_vecs = [], []
-
-        # Step 1: Semantic classification
         for i, title in enumerate(titles):
             best_idx = torch.argmax(similarities[i]).item()
             best_score = similarities[i][best_idx].item()
             seniority = self.extract_seniority(title)
 
-            if best_score < self.threshold:
-                residuals.append(title)
-                residual_vecs.append(title_embeddings[i])
-                results.append((title, "Unclassified", seniority, best_score))
-            else:
-                results.append((title, self.categories[best_idx], seniority, best_score))
+            category = self.categories[best_idx] if best_score > threshold else 'Other' 
 
-        # Step 2: Cluster emerging roles (low-similarity cases)
-        if residuals:
-            residual_vecs = np.vstack(residual_vecs)
-            n_clusters = min(n_clusters, len(residuals))
-            kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-            cluster_labels = kmeans.fit_predict(residual_vecs)
+            results.append((title, category, seniority, best_score))
 
-            for cluster_id in np.unique(cluster_labels):
-                cluster_titles = [residuals[i] for i in range(len(residuals)) if cluster_labels[i] == cluster_id]
-                centroid = kmeans.cluster_centers_[cluster_id]
-
-                sims = util.cos_sim(
-                    torch.tensor(centroid).unsqueeze(0),
-                    self.model.encode(cluster_titles, normalize_embeddings=True)
-                )
-                rep_title = cluster_titles[int(torch.argmax(sims))]
-                label = f"Emerging Role Cluster: {rep_title}"
-                self.clusters[label] = centroid
-
-                for i, title in enumerate(residuals):
-                    if cluster_labels[i] == cluster_id:
-                        for j in range(len(results)):
-                            if results[j][0] == title:
-                                results[j] = (title, label, results[j][2], results[j][3])
-
-        # Step 3: Create results DataFrame (index-aligned)
+        # Results DataFrame (index-aligned)
         results_df = pd.DataFrame(results, columns=[
             title_col,
             "cleaned_title_category",
             "seniority_level",
             "similarity_score"
         ])
-
-        # Align by index — prevents row duplication
         results_df.index = df.index
 
-        # Step 4: Concatenate results to original DataFrame
+        # Merge with original DataFrame
         df_final = pd.concat([
             df,
             results_df[["cleaned_title_category", "seniority_level", "similarity_score"]]
         ], axis=1)
-
+       
         return df_final
 
     def save_state(self):
-        """Persist clusters and category embeddings."""
-        joblib.dump(self.clusters, self.cluster_path)
+        """Persist category embeddings."""
         joblib.dump(self.category_embeddings, self.category_embeddings_path)
-        print(f"✅ State saved: {len(self.clusters)} clusters tracked.")
+        print(f"✅ State saved: {len(self.categories)} predefined categories.")
+
+
 class SkillEnhancer:
     GENERIC_SKILLS = {
         'Data Science', 'Artificial Intelligence', 'Ai', 'Analytics',
-        'Data Analysis', 'Programming', 'Coding', 'Statistics', 'Ml', 'Data Engineer'
+        'Data Analysis', 'Programming', 'Coding', 'Statistics', 'Ml', 'Machine Learning', 'Data Engineer'
     }
 
     @staticmethod

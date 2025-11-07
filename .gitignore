@@ -16,7 +16,7 @@ models/
 config.py
 .env
 secrets/
-
+.vscode/
 # Python
 __pycache__/
 *.pyc
