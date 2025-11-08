@@ -353,15 +353,62 @@ class EnhancedDataScienceJobsDashboard:
         return sorted(list(skills_set))
 
     def _render_filter_summary(self, filters: Dict, filtered_df: pd.DataFrame):
-        """Show current filter summary"""
-        if len(filtered_df) < len(self.df):
-            reduction_pct = ((len(self.df) - len(filtered_df)) / len(self.df)) * 100
-            st.success(f"""
-            **Filters Applied:** Showing {len(filtered_df):,} of {len(self.df):,} jobs 
-            ({reduction_pct:.1f}% reduction)
-            """)
+        """Show current filter summary and active filters"""
+        total = len(self.df)
+        shown = len(filtered_df)
+
+        # Build a readable list of active filters
+        active_parts = []
+        if filters:
+            # Date range
+            date_range = filters.get('date_range')
+            if date_range and isinstance(date_range, (list, tuple)) and len(date_range) == 2 and date_range[0] and date_range[1]:
+                try:
+                    start = pd.to_datetime(date_range[0]).strftime('%Y-%m-%d')
+                    end = pd.to_datetime(date_range[1]).strftime('%Y-%m-%d')
+                    active_parts.append(f"Date: {start} → {end}")
+                except Exception:
+                    # If parsing fails, skip date formatting
+                    pass
+
+            # Common categorical filters
+            for key in ['country', 'company', 'primary_job_type', 'cleaned_title_category', 'seniority_level']:
+                val = filters.get(key)
+                if val and val != 'All':
+                    pretty = key.replace('_', ' ').title()
+                    active_parts.append(f"{pretty}: {val}")
+
+            # Skills (if present)
+            skills = filters.get('skills')
+            if skills:
+                try:
+                    if isinstance(skills, (list, tuple)):
+                        skills_str = ', '.join(map(str, skills))
+                    else:
+                        skills_str = str(skills)
+                    active_parts.append(f"Skills: {skills_str}")
+                except Exception:
+                    active_parts.append(f"Skills: {skills}")
+
+        # Display summary
+        if shown < total:
+            reduction_pct = ((total - shown) / total) * 100 if total > 0 else 0
+            if active_parts:
+                st.success(
+                    f"""
+                    **Filters Applied:** Showing {shown:,} of {total:,} jobs ({reduction_pct:.1f}% reduction)
+
+                    **Active Filters:** {', '.join(active_parts)}
+                    """
+                )
+            else:
+                st.success(f"**Filters Applied:** Showing {shown:,} of {total:,} jobs ({reduction_pct:.1f}% reduction)")
         else:
-            st.info("**No filters applied:** Showing all available jobs")
+            # No row reduction; still show active filters if any
+            if active_parts:
+                st.info(f"**Active Filters (no row reduction):** {', '.join(active_parts)}")
+            else:
+                st.info("**No filters applied:** Showing all available jobs")
     
     def _render_enhanced_metrics(self, df: pd.DataFrame):
         """Render enhanced metrics cards"""
@@ -389,9 +436,9 @@ class EnhancedDataScienceJobsDashboard:
                 
         with col4:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            if 'salary_min' in df.columns:
-                avg_salary = df['salary_min'].mean()
-                st.metric(f"Avg Salary (From {df['salary_min'].notna().sum()} jobs)", f"${avg_salary:,.0f} " if not pd.isna(avg_salary) else "N/A")
+            if 'avg_salary_usd' in df.columns:
+                avg_salary = df['avg_salary_usd'].mean()
+                st.metric(f"Avg Salary (From {df['avg_salary_usd'].notna().sum()} jobs)", f"${avg_salary:,.0f} " if not pd.isna(avg_salary) else "N/A")
             else:
                 st.metric("Data Freshness", " days")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -665,16 +712,33 @@ class EnhancedDataScienceJobsDashboard:
         df = pivot_df.copy()
         df["date"] = pd.to_datetime(df["date"], format="%Y.0_%m.0")
 
-        # --- Column selector ---
-        column_choice = st.selectbox(
-            "Choose level of analysis:",
-            options=["skill", "skill_category"],
+        # --- Column selector / view mode ---
+        view_mode = st.selectbox(
+            "Choose view:",
+            options=["By Skill", "By Skill Category", "By Trend Category"],
             index=0
         )
 
+        # Normalize column_choice for backward compatibility
+        if view_mode == "By Skill":
+            column_choice = "skill"
+        elif view_mode == "By Skill Category":
+            column_choice = "skill_category"
+        else:
+            column_choice = "skill"  # we'll aggregate by trend category after computing skill trends
+
         # --- Explode job_ids ---
-        exploded = df.explode("job_ids").dropna(subset=[column_choice, "job_ids"])
+        exploded = df.explode("job_ids").dropna(subset=["job_ids"]).copy()
         exploded["job_ids"] = exploded["job_ids"].astype(str)
+
+        # If viewing by trend category we need skill-level mentions and trend labels
+        trends_df = None
+        if view_mode == "By Trend Category":
+            try:
+                trends_df = self.analyzer.analyze_skill_trends_full(pivot_df)
+            except Exception as e:
+                st.warning(f"Could not compute trend categories: {e}")
+                trends_df = None
 
         # --- Group by date + column ---
         grouped = exploded.groupby(["date", column_choice])
@@ -685,9 +749,9 @@ class EnhancedDataScienceJobsDashboard:
         merged = mentions_df.merge(total_jobs_per_date, on="date")
         merged["prevalence"] = (merged["mentions"] / merged["total_jobs"]) * 100
 
-        # --- Top N selector ---
-        st.markdown("### Skill/Category Selection")
-        top_n = st.slider("Select Top N by Mentions", min_value=2, max_value=20, value=5, step=5)
+        # --- Top N selector / selection UI ---
+        st.markdown("### Selection")
+        top_n = st.slider("Select Top N by Mentions", min_value=2, max_value=30, value=5, step=1)
 
         latest_date = merged["date"].max()
         top_n_items = (
@@ -696,14 +760,43 @@ class EnhancedDataScienceJobsDashboard:
             .tolist()
         )
 
-        available_options = sorted(merged[column_choice].unique())
-        selected_items = st.multiselect(
-            f"Select {column_choice.title()}s to Plot:",
-            options=available_options,
-            default=top_n_items
-        )
+        if view_mode != "By Trend Category":
+            available_options = sorted(merged[column_choice].unique())
+            selected_items = st.multiselect(
+                f"Select {column_choice.title()}s to Plot:",
+                options=available_options,
+                default=top_n_items
+            )
+        else:
+            # Trend Category mode: allow selecting categories and choose aggregated vs top-N
+            if trends_df is None or trends_df.empty:
+                st.info("Trend categories unavailable — falling back to skill view.")
+                available_options = sorted(merged[column_choice].unique())
+                selected_items = st.multiselect(
+                    f"Select {column_choice.title()}s to Plot:",
+                    options=available_options,
+                    default=top_n_items
+                )
+                view_mode = "By Skill"
+            else:
+                cat_options = sorted(trends_df['trend_category'].unique().tolist())
+                selected_cats = st.multiselect("Select Trend Categories:", options=cat_options, default=cat_options)
+                agg_mode = st.radio("Trend view mode:", options=["Average by Category", f"Top {top_n} Skills per Category"], index=0)
+                # build merged_skill (prevalence per skill per date) for further aggregation
+                exploded_skill = df.explode("job_ids").dropna(subset=["skill", "job_ids"]).copy()
+                exploded_skill["job_ids"] = exploded_skill["job_ids"].astype(str)
+                grouped_skill = exploded_skill.groupby(["date", "skill"])['job_ids'].nunique().reset_index(name='mentions')
+                total_jobs_per_date = exploded_skill.groupby('date')['job_ids'].nunique().reset_index(name='total_jobs')
+                merged_skill = grouped_skill.merge(total_jobs_per_date, on='date')
+                merged_skill['prevalence'] = (merged_skill['mentions'] / merged_skill['total_jobs']) * 100
+                # Merge trend labels
+                merged_skill = merged_skill.merge(trends_df[['skill','trend_category']], on='skill', how='left')
+                # Filter categories
+                merged_skill = merged_skill[merged_skill['trend_category'].isin(selected_cats)]
+                # We'll handle plotting below and return early from selection logic
+                selected_items = None
 
-        if not selected_items:
+        if view_mode != "By Trend Category" and not selected_items:
             st.info("👆 Please select at least one option to see the trends.")
             return
 
@@ -722,40 +815,68 @@ class EnhancedDataScienceJobsDashboard:
             col1, col2 = st.columns(2)
             
             with col1:
-                # Mentions trend
-                fig_mentions = px.line(
-                    merged,
-                    x="date", y="mentions", color=column_choice,
-                    markers=True,
-                    title=f"{column_choice.title()} Mentions Trends Over Time",
-                    labels={"date": "date", "mentions": "Mentions (# of Jobs)", column_choice: column_choice.title()}
-                )
+                # If trend-category aggregated view is active, plot aggregated lines
+                if view_mode == "By Trend Category":
+                    # average prevalence per category over time
+                    avg_df = merged_skill.groupby(['date','trend_category'])['prevalence'].mean().reset_index()
+                    fig_mentions = px.line(
+                        avg_df,
+                        x='date', y='prevalence', color='trend_category', markers=True,
+                        title='Average Prevalence by Trend Category Over Time',
+                        labels={'date':'date','prevalence':'Prevalence (% of Jobs)','trend_category':'Trend Category'}
+                    )
+                else:
+                    fig_mentions = px.line(
+                        merged,
+                        x="date", y="mentions", color=column_choice,
+                        markers=True,
+                        title=f"{column_choice.title()} Mentions Trends Over Time",
+                        labels={"date": "date", "mentions": "Mentions (# of Jobs)", column_choice: column_choice.title()}
+                    )
                 fig_mentions.update_layout(legend_title=column_choice.title(), xaxis=dict(tickformat="%b %Y"))
                 st.plotly_chart(fig_mentions, use_container_width=True)
                 
                 # Responsive caption for mentions
-                latest_data = merged[merged["date"] == latest_date]
-                if not latest_data.empty:
-                    top_grower = latest_data.loc[latest_data['mentions'].idxmax()]
-                    st.caption(f"**Highest demand**: {top_grower[column_choice]} with {int(top_grower['mentions'])} job postings")
+                if view_mode == "By Trend Category":
+                    latest_data = avg_df[avg_df['date'] == latest_date]
+                    if not latest_data.empty:
+                        top_grower = latest_data.loc[latest_data['prevalence'].idxmax()]
+                        st.caption(f"**Highest average prevalence**: {top_grower['trend_category']} with {top_grower['prevalence']:.1f}% of jobs")
+                else:
+                    latest_data = merged[merged["date"] == latest_date]
+                    if not latest_data.empty:
+                        top_grower = latest_data.loc[latest_data['mentions'].idxmax()]
+                        st.caption(f"**Highest demand**: {top_grower[column_choice]} with {int(top_grower['mentions'])} job postings")
 
             with col2:
                 # Prevalence trend
-                fig_prevalence = px.line(
-                    merged,
-                    x="date", y="prevalence", color=column_choice,
-                    markers=True,
-                    title=f"{column_choice.title()} Prevalence Trends Over Time",
-                    labels={"date": "date", "prevalence": "Prevalence (% of Jobs)", column_choice: column_choice.title()}
-                )
+                if view_mode == "By Trend Category":
+                    fig_prevalence = px.line(
+                        avg_df,
+                        x='date', y='prevalence', color='trend_category', markers=True,
+                        title='Average Prevalence by Trend Category Over Time',
+                        labels={'date':'date','prevalence':'Prevalence (% of Jobs)','trend_category':'Trend Category'}
+                    )
+                else:
+                    fig_prevalence = px.line(
+                        merged,
+                        x="date", y="prevalence", color=column_choice,
+                        markers=True,
+                        title=f"{column_choice.title()} Prevalence Trends Over Time",
+                        labels={"date": "date", "prevalence": "Prevalence (% of Jobs)", column_choice: column_choice.title()}
+                    )
                 fig_prevalence.update_layout(legend_title=column_choice.title(), xaxis=dict(tickformat="%b %Y"))
                 st.plotly_chart(fig_prevalence, use_container_width=True)
                 
                 # Responsive caption for prevalence
                 latest_data = merged[merged["date"] == latest_date]
                 if not latest_data.empty:
-                    most_prevalent = latest_data.loc[latest_data['prevalence'].idxmax()]
-                    st.caption(f"**Widest adoption**: {most_prevalent[column_choice]} in {most_prevalent['prevalence']:.1f}% of all jobs")
+                    if view_mode == "By Trend Category":
+                        most_prevalent = latest_data.loc[latest_data['prevalence'].idxmax()]
+                        st.caption(f"**Widest adoption**: {most_prevalent['trend_category']} in {most_prevalent['prevalence']:.1f}% of all jobs")
+                    else:
+                        most_prevalent = latest_data.loc[latest_data['prevalence'].idxmax()]
+                        st.caption(f"**Widest adoption**: {most_prevalent[column_choice]} in {most_prevalent['prevalence']:.1f}% of all jobs")
 
         else:  # Combined Dual-axis
             st.subheader("Combined Mentions & Prevalence Trends")

@@ -543,72 +543,72 @@ class HybridJobTitleClassifier:
         ]
         self.category_embeddings = self.model.encode(self.categories, normalize_embeddings=True)
 
-        # Seniority patterns (regex-based)
+        # Pre-compile regex patterns for seniority extraction
         self.seniority_patterns = [
-            (r'\b(intern|internship|trainee|apprentice|student)\b', 'Intern'),
-            (r'\b(entry[-\s]?level|junior|jr\.?)\b', 'Junior'),
-            (r'\b(associate|mid[-\s]?level|intermediate)\b', 'Mid-level'),
-            (r'\b(senior|sr\.?)\b', 'Senior'),
-            (r'\b(lead|principal|specialist|staff)\b', 'Lead'),
-            (r'\b(manager|head|director|supervisor)\b', 'Manager'),
-            (r'\b(vice president|vp|chief|executive|cto|ceo|founder|co-founder)\b', 'Executive')
+            (re.compile(r'\b(intern|internship|trainee|apprentice|student)\b', re.IGNORECASE), 'Intern'),
+            (re.compile(r'\b(entry[-\s]?level|junior|jr\.?)\b', re.IGNORECASE), 'Junior'),
+            (re.compile(r'\b(associate|mid[-\s]?level|intermediate)\b', re.IGNORECASE), 'Mid-level'),
+            (re.compile(r'\b(senior|sr\.?)\b', re.IGNORECASE), 'Senior'),
+            (re.compile(r'\b(lead|principal|specialist|staff)\b', re.IGNORECASE), 'Lead'),
+            (re.compile(r'\b(manager|head|director|supervisor)\b', re.IGNORECASE), 'Manager'),
+            (re.compile(r'\b(vice president|vp|chief|executive|cto|ceo|founder|co-founder)\b', re.IGNORECASE), 'Executive')
         ]
 
     def extract_seniority(self, title: str) -> str:
-        """Extract seniority level using regex."""
+        """Extract seniority level using pre-compiled regex patterns."""
         if not title or not isinstance(title, str):
             return "Unknown"
-        title_lower = title.lower()
+        
         for pattern, label in self.seniority_patterns:
-            if re.search(pattern, title_lower):
+            if pattern.search(title):
                 return label
         return "Unspecified"
 
-    def classify_dataframe(self, df: pd.DataFrame, title_col: str, threshold =.47) -> pd.DataFrame:
+    def classify_dataframe(self, df: pd.DataFrame, title_col: str, threshold=0.47) -> pd.DataFrame:
         """
         Classify job titles based on semantic similarity to predefined categories.
         Titles below similarity threshold are marked as 'Other'.
         Returns same number of rows with 3 new columns.
         """
         df = df.copy()
+        
+        # Fill NaN titles and convert to list once
         titles = df[title_col].fillna("").tolist()
-
-        # Encode job titles
-        title_embeddings = self.model.encode(titles, normalize_embeddings=True)
+        
+        # Batch encode all titles at once
+        title_embeddings = self.model.encode(titles, 
+                                           normalize_embeddings=True, 
+                                           show_progress_bar=False,
+                                           batch_size=8)  # Adjust batch size based on your GPU memory
+        
+        # Compute similarities in single operation (much faster than loop)
         similarities = util.cos_sim(title_embeddings, self.category_embeddings)
-
-        results = []
-        for i, title in enumerate(titles):
-            best_idx = torch.argmax(similarities[i]).item()
-            best_score = similarities[i][best_idx].item()
-            seniority = self.extract_seniority(title)
-
-            category = self.categories[best_idx] if best_score > threshold else 'Other' 
-
-            results.append((title, category, seniority, best_score))
-
-        # Results DataFrame (index-aligned)
-        results_df = pd.DataFrame(results, columns=[
-            title_col,
-            "cleaned_title_category",
-            "seniority_level",
-            "similarity_score"
-        ])
-        results_df.index = df.index
-
-        # Merge with original DataFrame
-        df_final = pd.concat([
-            df,
-            results_df[["cleaned_title_category", "seniority_level", "similarity_score"]]
-        ], axis=1)
-       
-        return df_final
+        
+        # Vectorized operations for best scores and indices
+        best_scores, best_indices = torch.max(similarities, dim=1)
+        best_scores = best_scores.numpy()
+        best_indices = best_indices.numpy()
+        
+        # Vectorized seniority extraction
+        seniorities = [self.extract_seniority(title) for title in titles]
+        
+        # Vectorized category assignment
+        categories = [
+            self.categories[idx] if score > threshold else 'Other'
+            for idx, score in zip(best_indices, best_scores)
+        ]
+        
+        # Create results directly as new columns (avoid intermediate DataFrame)
+        df["cleaned_title_category"] = categories
+        df["seniority_level"] = seniorities
+        df["similarity_score"] = best_scores
+        
+        return df
 
     def save_state(self):
         """Persist category embeddings."""
         joblib.dump(self.category_embeddings, self.category_embeddings_path)
         print(f"✅ State saved: {len(self.categories)} predefined categories.")
-
 
 class SkillEnhancer:
     GENERIC_SKILLS = {
@@ -643,4 +643,3 @@ class SkillEnhancer:
         df['skills_count'] = df['skills'].apply(len)
         logger.info("✅ Skills data enhanced")
         return df
-

@@ -20,19 +20,18 @@ warnings.filterwarnings('ignore')
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__) 
-from numba import njit
+from numba import njit, prange
 from statsmodels.api import OLS, add_constant
 from scipy import stats
 
-# ===== NUMBA OPTIMIZED FUNCTIONS =====
-
-
-@njit(fastmath=True)
+# -------------------------
+# 1. Exponential smoothing
+# -------------------------
+@njit(fastmath=True, parallel=True)
 def exp_smooth(y: np.ndarray, alpha: float) -> np.ndarray:
-    """Exponential smoothing row-wise for 2D array - optimized with numba"""
     n_rows, n_cols = y.shape
     out = np.empty_like(y)
-    for i in range(n_rows):
+    for i in prange(n_rows):
         current = y[i, 0]
         out[i, 0] = current
         for j in range(1, n_cols):
@@ -40,57 +39,218 @@ def exp_smooth(y: np.ndarray, alpha: float) -> np.ndarray:
             out[i, j] = current
     return out
 
-# ===== FIXED NUMBA FUNCTIONS =====
-
-@njit(fastmath=True)
-def calculate_vectorized_metrics(y_smoothed: np.ndarray) -> tuple:
-    """Calculate CAGR, momentum, and prevalence metrics using numpy - FIXED for Numba"""
+# -------------------------
+# 2. Metrics (CAGR, momentum, prevalence, peak ratio)
+# -------------------------
+@njit(fastmath=True, parallel=True)
+def calculate_rolling_metrics(y_smoothed: np.ndarray, window: int = 3):
     n_skills, n_time = y_smoothed.shape
-    
-    # CAGR calculation using numpy
-    start_vals = y_smoothed[:, 0]
-    end_vals = y_smoothed[:, -1]
-    n_periods = n_time - 1
-    cagr = np.empty_like(start_vals)
-    for i in range(len(cagr)):
-        if start_vals[i] > 0:
-            cagr[i] = ((end_vals[i] / start_vals[i]) ** (12 / n_periods) - 1) * 100
-        else:
-            cagr[i] = np.nan
-    
-    # Recent momentum - FIXED: manual mean calculation instead of np.mean with axis
+    cagr = np.zeros(n_skills)
     recent_momentum = np.zeros(n_skills)
-    if n_time >= 6:
-        for i in range(n_skills):
-            # Calculate recent average (last 3 months)
-            recent_sum = 0.0
-            for j in range(n_time-3, n_time):
-                recent_sum += y_smoothed[i, j]
-            recent_avg = recent_sum / 3
-            
-            # Calculate previous average (3 months before last 3)
-            prev_sum = 0.0
-            for j in range(n_time-6, n_time-3):
-                prev_sum += y_smoothed[i, j]
-            prev_avg = prev_sum / 3
-            
-            if prev_avg > 1e-12:
-                recent_momentum[i] = (recent_avg - prev_avg) / prev_avg * 100
-    
-    # Current and peak prevalence
-    current_prevalence = np.empty(n_skills)
-    peak_prevalence = np.empty(n_skills)
+    current_prevalence = np.zeros(n_skills)
+    peak_ratio = np.zeros(n_skills)
+
+    for i in prange(n_skills):
+        start = y_smoothed[i, 0]
+        end = y_smoothed[i, -1]
+        n_periods = n_time - 1
+        cagr[i] = ((end / start) ** (12 / n_periods) - 1) * 100 if start > 0 else np.nan
+
+        # Recent momentum
+        if n_time >= 2*window:
+            recent_avg = 0.0
+            prev_avg = 0.0
+            for j in range(n_time - window, n_time):
+                recent_avg += y_smoothed[i, j]
+            recent_avg /= window
+            for j in range(n_time - 2*window, n_time - window):
+                prev_avg += y_smoothed[i, j]
+            prev_avg /= window
+            recent_momentum[i] = ((recent_avg - prev_avg)/prev_avg*100) if prev_avg > 0 else 0
+        else:
+            recent_momentum[i] = 0
+
+        current_prevalence[i] = y_smoothed[i, -1]
+
+        # Peak prevalence
+        peak = y_smoothed[i, 0]
+        for j in range(1, n_time):
+            if y_smoothed[i, j] > peak:
+                peak = y_smoothed[i, j]
+        peak_ratio[i] = current_prevalence[i] / (peak + 1e-12)
+
+    return cagr, recent_momentum, current_prevalence, peak_ratio
+
+# -------------------------
+# 3. OLS slopes and intercepts
+# -------------------------
+@njit(fastmath=True, parallel=True)
+def batch_ols(y_smoothed: np.ndarray):
+    n_skills, n_time = y_smoothed.shape
+    slopes = np.zeros(n_skills)
+    intercepts = np.zeros(n_skills)
+
+    x = np.arange(n_time)
+    X = np.empty((n_time, 2))
+    X[:, 0] = 1.0
+    X[:, 1] = x
+
+    XT_X = X.T @ X
+    XT_X_inv = np.linalg.inv(XT_X)
+    for i in prange(n_skills):
+        beta = XT_X_inv @ X.T @ y_smoothed[i, :]
+        intercepts[i] = beta[0]
+        slopes[i] = beta[1]
+
+    return slopes, intercepts
+
+# -------------------------
+# 4. Nonlinearity
+# -------------------------
+@njit(fastmath=True, parallel=True)
+def calculate_nonlinearity(y_smoothed: np.ndarray, slopes: np.ndarray, intercepts: np.ndarray):
+    n_skills, n_time = y_smoothed.shape
+    nonlinearity = np.zeros(n_skills)
+    for i in prange(n_skills):
+        linear_pred = intercepts[i] + slopes[i] * np.arange(n_time)
+        residuals = y_smoothed[i, :] - linear_pred
+        mean_abs = 0.0
+        var_sum = 0.0
+        n = residuals.shape[0]
+        for j in range(n):
+            mean_abs += abs(residuals[j])
+        mean_abs /= n
+        if mean_abs > 0:
+            mean_val = 0.0
+            for j in range(n):
+                mean_val += residuals[j]
+            mean_val /= n
+            for j in range(n):
+                var_sum += (residuals[j] - mean_val)**2
+            nonlinearity[i] = np.sqrt(var_sum / (n-1)) / mean_abs
+        else:
+            nonlinearity[i] = 0
+    return nonlinearity
+
+# -------------------------
+# 5. Skill-wise percentile helpers (Numba)
+# -------------------------
+@njit(fastmath=True)
+def percentile_1d(arr: np.ndarray, q: float) -> float:
+    """Compute percentile manually for 1D array in Numba"""
+    sorted_arr = np.sort(arr)
+    idx = int(q * (len(arr) - 1))
+    return sorted_arr[idx]
+
+# -------------------------
+# 6. Skill-wise classification
+# -------------------------
+
+@njit
+def calculate_recent_percentile(y_smoothed: np.ndarray, window: int = 6) -> np.ndarray:
+    """
+    Calculate what percentile the latest month is within the recent window
+    Returns array where each skill has value 0-1 representing percentile in recent history
+    """
+    n_skills, n_time = y_smoothed.shape
+    recent_percentiles = np.zeros(n_skills)
     
     for i in range(n_skills):
-        current_prevalence[i] = y_smoothed[i, -1]
-        peak_prevalence[i] = y_smoothed[i, 0]
-        for j in range(1, n_time):
-            if y_smoothed[i, j] > peak_prevalence[i]:
-                peak_prevalence[i] = y_smoothed[i, j]
+        if n_time >= window:
+            # Get the last 'window' months including current month
+            recent_data = y_smoothed[i, -window:]
+            current_val = recent_data[-1]
+            
+            # Calculate percentile within recent window
+            count_below = 0
+            for j in range(window):
+                if recent_data[j] <= current_val:
+                    count_below += 1
+            recent_percentiles[i] = count_below / window
+        else:
+            # Not enough data, use 0.5 as neutral
+            recent_percentiles[i] = 0.5
+            
+    return recent_percentiles
+
+# Mapping integers to trend strings
+TREND_MAP = ["Stable", "Emerging", "Growing", "Declining", "Mature",
+             "Peaking", "Reviving", "Accelerating", "Stabilizing", "Rapidly Declining"]
+
+@njit
+def classify_trends_smart_recent(y_smoothed: np.ndarray, slopes: np.ndarray,
+                               recent_momentum: np.ndarray, current_prevalence: np.ndarray) -> np.ndarray:
+    """
+    Balanced trend classification using recent 6-month context and adjusted thresholds.
+    """
+    n_skills, n_time = y_smoothed.shape
+    categories = np.zeros(n_skills, dtype=np.int8)
     
-    peak_ratio = current_prevalence / (peak_prevalence + 1e-12)
+    recent_percentiles = calculate_recent_percentile(y_smoothed, window=6)
     
-    return cagr, recent_momentum, current_prevalence, peak_ratio
+    for i in range(n_skills):
+        current_val = current_prevalence[i]
+        slope = slopes[i]
+        momentum = recent_momentum[i]
+        recent_pct = recent_percentiles[i]
+        
+        # High prevalence skills (>25%)
+        if current_val > 25.0:
+            if slope < -0.3:
+                categories[i] = 3  # Declining
+            elif slope < -0.1 and recent_pct < 0.4:
+                categories[i] = 4  # Mature 
+            elif slope > 0.3 and recent_pct > 0.7:
+                categories[i] = 2  # Growing
+            elif slope > 0.2 and recent_pct > 0.8:
+                categories[i] = 5  # Peaking
+            else:
+                categories[i] = 0  # Stable
+        
+        # Medium prevalence skills (10-25%)
+        elif current_val > 10.0:
+            if slope > 0.8 and momentum > 5.0:
+                categories[i] = 7  # Accelerating
+            elif slope > 0.3 and recent_pct > 0.6:
+                categories[i] = 2  # Growing
+            elif slope < -0.3 and momentum < -3.0:
+                categories[i] = 9  # Rapidly Declining
+            elif slope < -0.2:
+                categories[i] = 3  # Declining
+            elif slope > 0.2 and recent_pct > 0.6:
+                categories[i] = 6  # Reviving
+            elif abs(slope) < 0.1 and recent_pct > 0.5:
+                categories[i] = 8  # Stabilizing
+            else:
+                categories[i] = 0  # Stable
+        
+        # Low prevalence skills (<10%)
+        else:
+            if slope > 0.5 and momentum > 8.0:
+                categories[i] = 1  # Emerging
+            elif slope > 0.3 and recent_pct > 0.6:
+                categories[i] = 2  # Growing
+            elif slope < -0.3 and momentum < -5.0:
+                categories[i] = 9  # Rapidly Declining
+            elif slope < -0.2:
+                categories[i] = 3  # Declining
+            elif slope > 0.2 and recent_pct > 0.7:
+                categories[i] = 6  # Reviving
+            elif abs(slope) < 0.1 and recent_pct < 0.4:
+                categories[i] = 8  # Stabilizing
+            else:
+                categories[i] = 0  # Stable
+                
+    return categories
+
+# Map integer codes back to strings after Numba
+def map_categories_to_strings(categories_int: np.ndarray) -> np.ndarray:
+    n = len(categories_int)
+    categories_str = np.empty(n, dtype=object)
+    for i in range(n):
+        categories_str[i] = TREND_MAP[categories_int[i]]
+    return categories_str
+
 class DataScienceJobsAnalyzer:
     """
     Comprehensive analyzer for data science job market trends
@@ -162,60 +322,98 @@ class DataScienceJobsAnalyzer:
             return []
     
     def create_skill_pivot(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Vectorized pivot creation - 5-10x faster"""
-        required_cols = ['country', 'company', 'cleaned_title_category', 'seniority_level', 'skills',
-                         'date', 'primary_job_type']
-        
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        if missing_cols:
-            raise ValueError(f"Missing required columns: {missing_cols}")
-        
-        # Preprocessing - vectorized
-        df = df.copy().dropna(subset=required_cols)
-        
-        # Vectorized skill processing
-        df["skills_list"] = df["skills"].apply(self._convert_to_list)
-        df["skills_list"] = df["skills_list"].apply(lambda lst: list(set([s.lower().strip() for s in lst])))
-        
-        # Explode once and group efficiently
-        exploded = df.explode('skills_list')[['date', 'country', 'company', 'primary_job_type', 
-                                            'cleaned_title_category', 'seniority_level', 'skills_list']]
-        exploded = exploded.rename(columns={'skills_list': 'skill'})
-        exploded['skill'] = exploded['skill'].str.title()
-        
-        # Create job_id for counting (using index as proxy)
-        exploded['job_id'] = exploded.index
-        
-        # Single aggregation pass
-        pivot_df = (exploded.groupby(['date', 'country', 'company', 'primary_job_type', 
-                                    'cleaned_title_category', 'seniority_level', 'skill'])
-                    .agg(mentions=('job_id', 'nunique'))
-                    .reset_index())
-        
-        # Calculate prevalence in vectorized way
-        total_jobs_per_group = (exploded.groupby(['date', 'country', 'company', 'primary_job_type', 
-                                                'cleaned_title_category', 'seniority_level'])
-                              ['job_id'].nunique()
-                              .reset_index(name='total_jobs'))
-        
-        pivot_df = pivot_df.merge(total_jobs_per_group, 
-                                on=['date', 'country', 'company', 'primary_job_type', 
-                                    'cleaned_title_category', 'seniority_level'])
-        
-        pivot_df['prevalence'] = (pivot_df['mentions'] / pivot_df['total_jobs']) * 100
-        pivot_df['skill_category'] = pivot_df['skill'].str.lower().map(self.skill_to_category)
-        
-        # Store job_ids as list for compatibility
-        job_skill_map = (exploded.groupby(['date', 'country', 'company', 'primary_job_type', 
-                                         'cleaned_title_category', 'seniority_level', 'skill'])
-                        ['job_id'].apply(list)
-                        .reset_index(name='job_ids'))
-        
-        pivot_df = pivot_df.merge(job_skill_map, 
-                                on=['date', 'country', 'company', 'primary_job_type', 
-                                    'cleaned_title_category', 'seniority_level', 'skill'])
-        pivot_df.to_parquet(self.processed_dir / "skill_pivot.parquet", index=False)
-        
+        """
+        Build a pivot-style DataFrame preserving job-level granularity.
+
+        Each job-skill pair is expanded before aggregation.
+        Groups by Month, Country, Company, Role, Seniority, etc.
+        Counts distinct job mentions per skill and computes prevalence.
+        """
+
+        # --- Sub-function: convert to list ---
+        def convert_to_list(x):
+            if pd.isna(x):
+                return []
+            if isinstance(x, list):
+                return x
+            try:
+                if isinstance(x, str) and x.startswith("["):
+                    return eval(x)
+                else:
+                    return [s.strip() for s in str(x).split(",") if s.strip()]
+            except Exception:
+                return []
+
+        # --- Required columns ---
+        required_cols = [
+            "country", "company", "cleaned_title_category", "seniority_level",
+            "skills", "date", "job_type", "work_mode"
+        ]
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"Missing required column: {col}")
+
+        # --- Preprocess ---
+        df = df.copy()
+        df = df.dropna(subset=required_cols)
+
+        # Ensure a stable unique identifier for each job
+        if "job_id" not in df.columns:
+            df["job_id"] = df.index.astype(str)
+
+        # normalize and explode skills
+        df["skills_list"] = df["skills"].apply(convert_to_list)
+        df["skills_list"] = df["skills_list"].apply(
+            lambda lst: list(set([s.lower().strip() for s in lst]))
+        )
+        df = df.explode("skills_list").dropna(subset=["skills_list"])
+
+        # --- Grouping after expansion ---
+        grouped = (
+            df.groupby(
+                ["date", "country", "company", "job_type", "work_mode",
+                "cleaned_title_category", "seniority_level", "skills_list"]
+            )
+            .agg(
+                job_ids=("job_id", lambda x: list(set(x))),
+                total_jobs=("job_id", "nunique")
+            )
+            .reset_index()
+        )
+
+        # --- Compute mentions and prevalence per skill in each group ---
+        grouped["mentions"] = grouped["job_ids"].apply(len)
+        grouped["prevalence"] = (
+            grouped["mentions"]
+            / grouped.groupby(
+                ["date", "country", "company", "job_type", "work_mode",
+                "cleaned_title_category", "seniority_level"]
+            )["mentions"].transform("sum")
+        ) * 100
+
+        # --- Rename for clarity ---
+        pivot_df = grouped.rename(columns={"skills_list": "skill"})
+
+        # --- Skill Categories ---
+        SKILL_CATEGORIES = {
+            "Programming": ["python", "r", "sql", "java", "scala", "c++", "javascript", "julia"],
+            "ML Frameworks": ["tensorflow", "pytorch", "keras", "scikit-learn", "mxnet", "caffe"],
+            "Big Data": ["spark", "hadoop", "hive", "kafka", "airflow", "dbt", "snowflake"],
+            "Cloud": ["aws", "azure", "gcp", "docker", "kubernetes", "terraform"],
+            "Visualization": ["tableau", "powerbi", "matplotlib", "seaborn", "plotly", "d3"],
+            "Statistics": ["statistics", "hypothesis testing", "experimentation", "a/b testing"],
+            "ML Techniques": ["machine learning", "deep learning", "nlp", "computer vision", "reinforcement learning"],
+        }
+
+        skill_to_category = {
+            skill.lower(): cat
+            for cat, skills in SKILL_CATEGORIES.items()
+            for skill in skills
+        }
+
+        pivot_df["skill_category"] = pivot_df["skill"].map(skill_to_category)
+        pivot_df.to_parquet(self.processed_dir/'skill_pivot.parquet', index=False)
+
         return pivot_df
     
     def aggregate_pivot(self, filtered_df: pd.DataFrame, column: str = "skill", metric: str = "mentions") -> pd.DataFrame:
@@ -873,178 +1071,39 @@ class DataScienceJobsAnalyzer:
     
     # ==================== TREND ANALYSIS METHODS ====================
     
-    def _batch_ols_analysis(self, y_smoothed: np.ndarray, x: np.ndarray) -> tuple:
-        """Batch OLS regression using statsmodels with optimization"""
-        n_skills = y_smoothed.shape[0]
-        slopes = np.zeros(n_skills)
-        r2 = np.zeros(n_skills)
-        pvals = np.ones(n_skills)
-        
-        # Precompute X matrix for statsmodels OLS
-        X = add_constant(x)
-        
-        for i in range(n_skills):
-            # Use statsmodels OLS for accurate results
-            model = OLS(y_smoothed[i], X).fit()
-            slopes[i] = model.params[1]
-            r2[i] = model.rsquared
-            pvals[i] = model.pvalues[1]
-        
-        return slopes, r2, pvals
-
-    def _calculate_nonlinearity(self, y_smoothed: np.ndarray, x: np.ndarray, 
-                            slopes: np.ndarray, intercepts: np.ndarray) -> np.ndarray:
-        """Calculate nonlinearity using scipy stats"""
-        n_skills = y_smoothed.shape[0]
-        nonlinearity = np.zeros(n_skills)
-        
-        for i in range(n_skills):
-            # Calculate linear predictions
-            linear_pred = intercepts[i] + slopes[i] * x
-            
-            # Calculate residuals from linear fit
-            residuals = y_smoothed[i] - linear_pred
-            
-            # Use scipy stats to measure nonlinearity (variance of residuals)
-            # Higher variance indicates more nonlinearity
-            if len(residuals) > 2:
-                # Using coefficient of variation of residuals as nonlinearity measure
-                residual_std = np.std(residuals, ddof=1)
-                residual_mean = np.mean(np.abs(residuals))
-                if residual_mean > 0:
-                    nonlinearity[i] = residual_std / residual_mean
-                else:
-                    nonlinearity[i] = 0
-            else:
-                nonlinearity[i] = 0
-        
-        return nonlinearity
-
-    def _classify_trend_categories(self, slopes: np.ndarray, pvals: np.ndarray,
-                              current_prevalence: np.ndarray, recent_momentum: np.ndarray,
-                              cagr: np.ndarray, peak_ratio: np.ndarray, significance_level: float = 0.05,
-                 emerging_percentile: float = 0.4,
-                 momentum_threshold: float = 5) -> np.ndarray:
-        """Comprehensive trend classification using all metrics - FIXED version"""
-        n_skills = len(slopes)
-        significant = pvals < significance_level
-        
-        # Calculate prevalence percentiles using pandas
-        prevalence_percentile = pd.Series(current_prevalence).rank(pct=True).values
-        
-        categories = np.full(n_skills, "Stable", dtype=object)
-        
-        # MAIN TREND CATEGORIES
-        
-        # Emerging: Low prevalence, significant positive trend
-        emerging_mask = (slopes > 0) & significant & (prevalence_percentile < emerging_percentile)
-        categories[emerging_mask] = "Emerging"
-        
-        # Growing: Higher prevalence, significant positive trend
-        growing_mask = (slopes > 0) & significant & (prevalence_percentile >= emerging_percentile)
-        categories[growing_mask] = "Growing"
-        
-        # Declining: Significant negative trend
-        declining_mask = (slopes < 0) & significant
-        categories[declining_mask] = "Declining"
-        
-        # NUANCED CATEGORIES
-        
-        # Peaking: Near historical peak but showing decline momentum
-        peaking_mask = (peak_ratio > 0.85) & (recent_momentum < -5)
-        # FIXED: Use numpy operations instead of .isin()
-        peaking_indices = peaking_mask & (categories == "Stable")
-        categories[peaking_indices] = "Peaking"
-        
-        # Reviving: Previously negative CAGR but recent positive momentum
-        reviving_mask = (cagr < 0) & (recent_momentum > momentum_threshold)
-        reviving_indices = reviving_mask & (categories == "Stable")
-        categories[reviving_indices] = "Reviving"
-        
-        # Accelerating: Strong positive momentum on already positive trends
-        accelerating_mask = (recent_momentum > 15) & (slopes > 0)
-        # FIXED: Use numpy operations for array comparison
-        accelerating_indices = accelerating_mask & (
-            (categories == "Emerging") | (categories == "Growing")
-        )
-        categories[accelerating_indices] = "Accelerating"
-        
-        # Decelerating: Strong negative momentum on declining trends
-        decelerating_mask = (recent_momentum < -15) & (slopes < 0)
-        decelerating_indices = decelerating_mask & (categories == "Declining")
-        categories[decelerating_indices] = "Rapidly Declining"
-        
-        # Stabilizing: Previously volatile but now stable
-        stabilizing_mask = (np.abs(recent_momentum) < 2) & (peak_ratio > 0.7)
-        stabilizing_indices = stabilizing_mask & (categories == "Stable")
-        categories[stabilizing_indices] = "Stabilizing"
-        
-        return categories
-
-    def analyze_skill_trends_optimized(self, pivot_df: pd.DataFrame, min_prevalence=1.0, min_months=8, smoothing_alpha: float = 0.3, 
-                 significance_level: float = 0.05,
-                 emerging_percentile: float = 0.4,
-                 momentum_threshold: float = 5) -> pd.DataFrame:
-        """Main analysis method using all optimized components"""
-        
-        # Data preparation with pandas
+    def analyze_skill_trends_full(self, pivot_df: pd.DataFrame, min_prevalence=1.0, min_months=8, smoothing_alpha=0.3):
         months = sorted(pivot_df["date"].unique())
         if len(months) < min_months:
             return pd.DataFrame()
 
-        # Pivot using pandas for flexibility
         skill_month_matrix = pivot_df.pivot_table(
-            index="skill",
-            columns="date", 
-            values="mentions",
-            aggfunc="sum",
-            fill_value=0
+            index="skill", columns="date", values="mentions", aggfunc="sum", fill_value=0
         ).reindex(columns=months)
 
-        # Calculate monthly totals using pandas
         monthly_totals = pivot_df.groupby("date")["job_ids"].apply(
             lambda x: len(set([i for sublist in x for i in sublist]))
         ).reindex(months)
 
-        # Prevalence calculation with numpy
         prevalence = skill_month_matrix.div(monthly_totals, axis=1) * 100
         prevalence = prevalence.loc[prevalence.mean(axis=1) >= min_prevalence]
-        
         if prevalence.empty:
             return pd.DataFrame()
 
-        # Convert to numpy for fast computation
         y = prevalence.values.astype(np.float64)
-        n_skills, n_time = y.shape
-        x = np.arange(n_time)
 
-        # Exponential smoothing with numba
+        # Exponential smoothing
         y_smoothed = exp_smooth(y, smoothing_alpha)
 
-        # Vectorized metrics with numpy
-        cagr, recent_momentum, current_prevalence, peak_ratio = calculate_vectorized_metrics(y_smoothed)
+        # Metrics
+        cagr, recent_momentum, current_prevalence, peak_ratio = calculate_rolling_metrics(y_smoothed)
+        slopes, intercepts = batch_ols(y_smoothed)
+        nonlinearity = calculate_nonlinearity(y_smoothed, slopes, intercepts)
 
-        # OLS analysis with statsmodels
-        slopes, r2, pvals = self._batch_ols_analysis(y_smoothed, x)
-        
-        # Calculate intercepts for nonlinearity calculation
-        X_ols = add_constant(x)
-        intercepts = np.zeros(n_skills)
-        for i in range(n_skills):
-            model = OLS(y_smoothed[i], X_ols).fit()
-            intercepts[i] = model.params[0]
+        # Skill-wise classification using percentiles
+        categories = map_categories_to_strings(
+    classify_trends_smart_recent(y_smoothed, slopes, recent_momentum, current_prevalence))
 
-        # Nonlinearity with scipy stats
-        nonlinearity = self._calculate_nonlinearity(y_smoothed, x, slopes, intercepts)
-
-        # Trend classification
-        significant = pvals < significance_level
-        prevalence_percentile = pd.Series(current_prevalence).rank(pct=True).values
-        categories = self._classify_trend_categories(
-            slopes, pvals, current_prevalence, recent_momentum, cagr, peak_ratio
-        )
-
-        # Create comprehensive results with pandas
+        # Build final DataFrame
         df = pd.DataFrame({
             "skill": prevalence.index,
             "CAGR_pct": cagr,
@@ -1052,15 +1111,11 @@ class DataScienceJobsAnalyzer:
             "current_prevalence": current_prevalence,
             "peak_ratio": peak_ratio,
             "trend_slope": slopes,
-            "trend_r2": r2,
-            "trend_p_value": pvals,
-            "significant": significant,
             "nonlinearity": nonlinearity,
-            "prevalence_percentile": prevalence_percentile,
             "trend_category": categories
         })
 
-        # Add boolean flags for easy filtering
+        # Boolean flags
         df["is_emerging"] = df["trend_category"].isin(["Emerging", "Accelerating"])
         df["is_declining"] = df["trend_category"].isin(["Declining", "Rapidly Declining"])
         df["is_growing"] = df["trend_category"].isin(["Growing", "Accelerating"])
@@ -1068,7 +1123,7 @@ class DataScienceJobsAnalyzer:
         df["is_special"] = df["trend_category"].isin(["Peaking", "Reviving"])
 
         return df.sort_values("trend_slope", ascending=False).reset_index(drop=True)
-
+    
     def get_trend_summary(self, results_df: pd.DataFrame) -> pd.DataFrame:
         """Get summary statistics by trend category using pandas"""
         if results_df.empty:
@@ -1194,7 +1249,6 @@ class DataScienceJobsAnalyzer:
         } for (skill1, skill2), count in combo_counts.most_common(top_n) if count >= min_mentions]
         
         return pd.DataFrame(results)
-
 
     def _categorize_fast(self, skill1: str, skill2: str) -> str:
         """Ultra-fast categorization using pre-existing mapping"""
@@ -1814,4 +1868,3 @@ class DataScienceJobsAnalyzer:
             })
         
         return pd.DataFrame(category_insights).sort_values('total_mentions', ascending=False)
-
