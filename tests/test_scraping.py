@@ -7,7 +7,7 @@ import os
 
 # Add the src directory to the Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from src.scrape_jobs import JobScraper
+from src.scraping.scrape_jobs import JobScraper
 
 
 class TestJobScraper:

@@ -14,7 +14,7 @@ import joblib
 # Add the src directory to Python path to import the module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.clean_jobs import DataScienceJobsCleaner, HybridJobTitleClassifier, SkillEnhancer
+from src.cleaning.clean_jobs import DataScienceJobsCleaner, HybridJobTitleClassifier, SkillEnhancer
 
 
 class TestDataScienceJobsCleaner:

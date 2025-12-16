@@ -1,12 +1,11 @@
 # Data files - DO NOT COMMIT
-*.csv
-*.parquet
 *.jsonl
 *.xlsx
 *.pkl
 
 # Output directories
-data/
+data/raw
+data/fe-course-data
 output/
 results/
 raw_data/
@@ -22,3 +21,6 @@ __pycache__/
 *.pyc
 .env
 .pytest_cache
+.github/
+# Outside files
+notebooks/Mayenmein Terence Sama (UBa25PP122).ipynb 
