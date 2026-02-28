@@ -115,7 +115,7 @@ class DashboardManager:
             st.subheader("📁 Dataset Info")
             st.info(f"""
             **Total Jobs:** {len(self.df):,}
-            **Companies:** {self.df['company'].nunique():,}  
+            **Companies:** {self.df['company_name'].nunique():,}  
             **Last Updated:** {datetime.now().strftime('%Y-%m-%d')}
             """)
             
@@ -129,10 +129,10 @@ class DashboardManager:
             
             # Date Range Filter
             st.subheader("📅 Date Range Filter")
-            if 'date' in filtered_df.columns and not filtered_df.empty:
+            if 'published' in filtered_df.columns and not filtered_df.empty:
                 try:
-                    min_date = pd.to_datetime(filtered_df['date'], format='%Y.0_%m.0').min()
-                    max_date = pd.to_datetime(filtered_df['date'], format='%Y.0_%m.0').max()
+                    min_date = pd.to_datetime(filtered_df['published'], format='%Y.0_%m.0').min()
+                    max_date = pd.to_datetime(filtered_df['published'], format='%Y.0_%m.0').max()
                     
                     date_range = st.date_input(
                         "Select Date Range",
@@ -147,8 +147,8 @@ class DashboardManager:
                     if len(date_range) == 2 and date_range[0] and date_range[1]:
                         start_date, end_date = date_range
                         filtered_df = filtered_df[
-                            (pd.to_datetime(filtered_df['date'], format='%Y.0_%m.0') >= pd.to_datetime(start_date)) & 
-                            (pd.to_datetime(filtered_df['date'], format='%Y.0_%m.0') <= pd.to_datetime(end_date))
+                            (pd.to_datetime(filtered_df['published'], format='%Y.0_%m.0') >= pd.to_datetime(start_date)) & 
+                            (pd.to_datetime(filtered_df['published'], format='%Y.0_%m.0') <= pd.to_datetime(end_date))
                         ]
                 except Exception as e:
                     st.warning(f"Date filtering may not work properly: {e}")
@@ -177,9 +177,9 @@ class DashboardManager:
                     filters['country'] = 'All'
             
             # Company Filter
-            if 'company' in filtered_df.columns and not filtered_df.empty:
+            if 'company_name' in filtered_df.columns and not filtered_df.empty:
                 st.subheader("🏢 Company Filter")
-                company_counts = filtered_df['company'].value_counts()
+                company_counts = filtered_df['company_name'].value_counts()
                 valid_companies = company_counts[company_counts > 10]
                 if len(valid_companies) > 0:
                     companies = ['All'] + valid_companies.index.tolist()
@@ -189,13 +189,13 @@ class DashboardManager:
                         index=0,
                         help="Filter jobs by company (only showing companies with 10+ jobs)"
                     )
-                    filters['company'] = selected_company
+                    filters['company_name'] = selected_company
                     
                     if selected_company != 'All':
                         filtered_df = filtered_df.query(f"company == '{selected_company}'")
                 else:
                     st.info("No companies with 10+ jobs in current selection")
-                    filters['company'] = 'All'
+                    filters['company_name'] = 'All'
             
             # Primary Job Type Filter
             if 'primary_job_type' in filtered_df.columns and not filtered_df.empty:
@@ -219,9 +219,9 @@ class DashboardManager:
                     filters['primary_job_type'] = 'All'
             
             # Role Category Filter
-            if 'cleaned_title_category' in filtered_df.columns and not filtered_df.empty:
+            if 'standardized_title' in filtered_df.columns and not filtered_df.empty:
                 st.subheader("🎯 Role Category Filter")
-                role_counts = filtered_df['cleaned_title_category'].value_counts()
+                role_counts = filtered_df['standardized_title'].value_counts()
                 valid_roles = role_counts[role_counts > 10]
                 if len(valid_roles) > 0:
                     roles = ['All'] + valid_roles.index.tolist()
@@ -231,13 +231,13 @@ class DashboardManager:
                         index=0,
                         help="Filter jobs by role category (only showing roles with 10+ jobs)"
                     )
-                    filters['cleaned_title_category'] = selected_role
+                    filters['standardized_title'] = selected_role
                     
                     if selected_role != 'All':
-                        filtered_df = filtered_df.query(f"cleaned_title_category == '{selected_role}'")
+                        filtered_df = filtered_df.query(f"standardized_title == '{selected_role}'")
                 else:
                     st.info("No roles with 10+ jobs in current selection")
-                    filters['cleaned_title_category'] = 'All'
+                    filters['standardized_title'] = 'All'
             
             # Seniority Level Filter
             if 'seniority_level' in filtered_df.columns and not filtered_df.empty:
@@ -277,12 +277,12 @@ class DashboardManager:
                 end_date = pd.to_datetime(end_date)
                 
                 df_filtered = df_filtered[
-                    (pd.to_datetime(df_filtered['date'], format='%Y.0_%m.0') >= start_date) &  
-                    (pd.to_datetime(df_filtered['date'], format='%Y.0_%m.0') <= end_date)
+                    (pd.to_datetime(df_filtered['published'], format='%Y.0_%m.0') >= start_date) &  
+                    (pd.to_datetime(df_filtered['published'], format='%Y.0_%m.0') <= end_date)
                 ]
                 main_df = main_df[
-                    (pd.to_datetime(main_df['date'], format='%Y.0_%m.0') >= start_date) & 
-                    (pd.to_datetime(main_df['date'], format='%Y.0_%m.0') <= end_date)
+                    (pd.to_datetime(main_df['published'], format='%Y.0_%m.0') >= start_date) & 
+                    (pd.to_datetime(main_df['published'], format='%Y.0_%m.0') <= end_date)
                 ]
         
         # Country filter
@@ -291,9 +291,9 @@ class DashboardManager:
             main_df = main_df.query(f"country == '{filters['country']}'") 
         
         # Company filter
-        if filters.get('company') and filters['company'] != 'All':
-            df_filtered = df_filtered.query(f"company == '{filters['company']}'")  
-            main_df = main_df.query(f"company == '{filters['company']}'") 
+        if filters.get('company_name') and filters['company_name'] != 'All':
+            df_filtered = df_filtered.query(f"company == '{filters['company_name']}'")  
+            main_df = main_df.query(f"company == '{filters['company_name']}'") 
         
         # Primary job type filter
         if filters.get('primary_job_type') and filters['primary_job_type'] != 'All':
@@ -301,9 +301,9 @@ class DashboardManager:
             main_df = main_df.query(f"primary_job_type == '{filters['primary_job_type']}'") 
         
         # Role filter
-        if filters.get('cleaned_title_category') and filters['cleaned_title_category'] != 'All':
-            df_filtered = df_filtered.query(f"cleaned_title_category == '{filters['cleaned_title_category']}'") 
-            main_df = main_df.query(f"cleaned_title_category == '{filters['cleaned_title_category']}'") 
+        if filters.get('standardized_title') and filters['standardized_title'] != 'All':
+            df_filtered = df_filtered.query(f"standardized_title == '{filters['standardized_title']}'") 
+            main_df = main_df.query(f"standardized_title == '{filters['standardized_title']}'") 
         
         # Seniority filter
         if filters.get('seniority_level') and filters['seniority_level'] != 'All':
@@ -364,7 +364,7 @@ def main():
     
     with col2:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        companies = dashboard_manager.df['company'].nunique() if not dashboard_manager.df.empty else 0
+        companies = dashboard_manager.df['company_name'].nunique() if not dashboard_manager.df.empty else 0
         st.metric("Companies", f"{companies:,}")
         st.markdown('</div>', unsafe_allow_html=True)
     

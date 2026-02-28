@@ -2,14 +2,15 @@
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from src.core.base_analyzer import BaseAnalyzer
-from src.analysis.skill_analyzer import SkillAnalyzer
+import logging 
 from src.analysis.role_analyzer import RoleAnalyzer
-
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)  
 class EcosystemAnalyzer(RoleAnalyzer):
     def identify_natural_skill_clusters(self, pivot_df: pd.DataFrame, top_skills_count: int = 30) -> dict:
         """Fast co-occurrence analysis using matrix operations"""
-        self.logger.info("🎯 Fast Natural Skill Clusters Identification...")
+        logger.info("Fast Natural Skill Clusters Identification...")
         
         top_skills_df = self.analyze_skill_frequency(pivot_df, top_n=top_skills_count)
         top_skill_names = set(top_skills_df['skill'].tolist())
@@ -64,7 +65,7 @@ class EcosystemAnalyzer(RoleAnalyzer):
     
     def analyze_skill_ecosystem(self, pivot_df: pd.DataFrame) -> dict:
         """Comprehensive analysis of the skill ecosystem based entirely on data"""
-        self.logger.info("🌐 Analyzing Complete Skill Ecosystem...")
+        logger.info("Analyzing Complete Skill Ecosystem...")
         
         ecosystem = {}
         ecosystem['top_combinations'] = self.analyze_skill_combination_prevalence(pivot_df, top_n=15)
@@ -85,7 +86,7 @@ class EcosystemAnalyzer(RoleAnalyzer):
     
     def analyze_role_skill_concentration_data_driven(self, pivot_df: pd.DataFrame) -> dict:
         """Data-driven analysis of skill concentration vs universality"""
-        self.logger.info("🎯 Data-Driven Skill Concentration Analysis...")
+        logger.info("Data-Driven Skill Concentration Analysis...")
         
         skills_by_role = self.analyze_skills_by_role(pivot_df, top_n=20)
         skill_universality = {}

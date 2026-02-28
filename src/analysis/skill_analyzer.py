@@ -1,12 +1,10 @@
 """Skill frequency and combination analysis"""
-import pandas as pd
-from collections import Counter
-from itertools import combinations
+import pandas as pd 
 from tqdm import tqdm
-from src.core.base_analyzer import BaseAnalyzer
-from src.core.data_processor import DataProcessor
-
-class SkillAnalyzer(DataProcessor):
+from src.analysis.analyze_jobs import BaseAnalyzer
+from itertools import combinations
+from collections import Counter 
+class SkillAnalyzer(BaseAnalyzer):
     def analyze_skill_frequency(self, pivot_df: pd.DataFrame, top_n: int = 20) -> pd.DataFrame:
         """Analyze overall skill frequency across the entire dataset"""
         return self.aggregate_pivot(pivot_df, column="skill", metric="mentions").head(top_n)
@@ -16,8 +14,7 @@ class SkillAnalyzer(DataProcessor):
         return self.aggregate_pivot(pivot_df, column="skill_category", metric="mentions").head(top_n)
     
     def analyze_skill_combination_prevalence(self, pivot_df: pd.DataFrame, top_n: int = 20) -> pd.DataFrame:
-        """Ultra-fast skill combination analysis"""
-        self.logger.info("🔗 Ultra-fast Skill Combination Prevalence Analysis...")
+        """Ultra-fast skill combination analysis""" 
         skill_pairs = self.prepare_skill_combinations_fast(pivot_df, min_mentions=3, top_n=top_n * 2)
         
         if skill_pairs.empty:
@@ -50,12 +47,51 @@ class SkillAnalyzer(DataProcessor):
         return pd.DataFrame(results).head(top_n)
     
     def prepare_skill_combinations_fast(self, pivot_df: pd.DataFrame, 
-                                      combination_size: int = 2,
-                                      min_mentions: int = 10,
-                                      top_n: int = 20) -> pd.DataFrame:
-        """Ultra-fast skill combination analysis using vectorized operations"""
-        # Implementation from original script...
-        pass
+                                  combination_size: int = 2,
+                                  min_mentions: int = 10,
+                                  top_n: int = 20) -> pd.DataFrame:
+        """Ultra-fast skill combination analysis using vectorized operations""" 
+        
+        # Use pre-exploded data for efficiency
+        if 'job_ids' not in pivot_df.columns or not pivot_df['job_ids'].iloc[0]:
+            job_skills = pivot_df.explode('job_ids')[['job_ids', 'skill']].dropna().drop_duplicates()
+        else:
+            job_skills = pivot_df[['job_ids', 'skill']].explode('job_ids').dropna().drop_duplicates()
+        
+        # Filter to jobs with enough skills quickly
+        job_skill_counts = job_skills.groupby('job_ids')['skill'].count().reset_index(name='skill_count')
+        valid_jobs = job_skill_counts[job_skill_counts['skill_count'] >= combination_size]['job_ids']
+        job_skills_filtered = job_skills[job_skills['job_ids'].isin(valid_jobs)]
+        
+        # Group skills by job and filter in one go
+        job_skill_sets = (job_skills_filtered.groupby('job_ids')['skill']
+                        .apply(frozenset)  # Use frozenset for hashability
+                        .reset_index())
+        
+        # Use Counter with itertools.combinations - optimized
+        combo_counts = Counter()
+        
+        for skills in tqdm(job_skill_sets['skill'], desc="Counting combinations"):
+            if len(skills) <= 20:  # Reasonable limit
+                # Convert to sorted tuple for consistent counting
+                for combo in combinations(sorted(skills), combination_size):
+                    combo_counts[combo] += 1
+        
+        # Convert to DataFrame efficiently
+        if not combo_counts:
+            return pd.DataFrame()
+        
+        # Use list comprehension for faster DataFrame creation
+        total_jobs = job_skills['job_ids'].nunique()
+        results = [{
+            'skill_1': skill1,
+            'skill_2': skill2, 
+            'mentions': count,
+            'prevalence': (count / total_jobs) * 100
+        } for (skill1, skill2), count in combo_counts.most_common(top_n) if count >= min_mentions]
+        
+        return pd.DataFrame(results)
+
     
     def _categorize_fast(self, skill1: str, skill2: str) -> str:
         """Ultra-fast categorization using pre-existing mapping"""

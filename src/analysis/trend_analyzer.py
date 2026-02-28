@@ -1,7 +1,7 @@
 """Skill trend analysis over time"""
 import pandas as pd
 import numpy as np
-from src.core.base_analyzer import BaseAnalyzer
+from src.analysis.analyze_jobs import BaseAnalyzer
 from src.utils.calculations import (
     calculate_smoothed_growth, calculate_rolling_metrics, 
     batch_ols, calculate_nonlinearity, classify_trends_smart_recent, 
@@ -14,15 +14,15 @@ class TrendAnalyzer(BaseAnalyzer):
                                   min_avg_mentions=5,
                                   min_months=8,
                                   smoothing_alpha=0.3):
-        months = sorted(pivot_df["date"].unique())
+        months = sorted(pivot_df["published"].unique())
         if len(months) < min_months:
             return pd.DataFrame()
 
         skill_month_matrix = pivot_df.pivot_table(
-            index="skill", columns="date", values="mentions", aggfunc="sum", fill_value=0
+            index="skill", columns="published", values="mentions", aggfunc="sum", fill_value=0
         ).reindex(columns=months)
 
-        monthly_totals = pivot_df.groupby("date")["job_ids"].apply(
+        monthly_totals = pivot_df.groupby("published")["job_ids"].apply(
             lambda x: len(set([i for sublist in x for i in sublist]))
         ).reindex(months)
 

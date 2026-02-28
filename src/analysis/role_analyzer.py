@@ -1,6 +1,6 @@
 """Role-based skill analysis"""
 import pandas as pd
-from src.core.base_analyzer import BaseAnalyzer
+from src.analysis.analyze_jobs import BaseAnalyzer
 from src.analysis.skill_analyzer import SkillAnalyzer
 
 class RoleAnalyzer(SkillAnalyzer):
@@ -32,7 +32,7 @@ class RoleAnalyzer(SkillAnalyzer):
     
     def analyze_skills_by_role(self, pivot_df: pd.DataFrame, top_n: int = 15) -> dict:
         """Analyze top skills for each role category"""
-        return self.analyze_by_group(pivot_df, 'cleaned_title_category', top_n)
+        return self.analyze_by_group(pivot_df, 'standardized_title', top_n)
     
     def analyze_skills_by_seniority(self, pivot_df: pd.DataFrame, top_n: int = 15) -> dict:
         """Analyze top skills for each seniority level"""

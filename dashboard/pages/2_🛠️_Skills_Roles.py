@@ -43,12 +43,12 @@ def render_career_paths(pivot_df, role_analyzer):
     """Help users choose and compare career paths"""
     st.header("🎯 Choose Your Career Path")
     
-    if "cleaned_title_category" not in pivot_df.columns:
+    if "standardized_title" not in pivot_df.columns:
         st.warning("Role data not available")
         return
 
     # Get available roles
-    roles = pivot_df["cleaned_title_category"].dropna().unique().tolist()
+    roles = pivot_df["standardized_title"].dropna().unique().tolist()
     
     st.subheader("Compare Career Options")
     

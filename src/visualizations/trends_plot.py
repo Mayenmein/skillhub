@@ -153,12 +153,12 @@ class TrendsAnalysisPlot:
         fig, ax = plt.subplots(figsize=figsize)
         
         # Prepare data
-        months = sorted(pivot_df["date"].unique())
+        months = sorted(pivot_df["published"].unique())
         skill_month_matrix = pivot_df.pivot_table(
-            index="skill", columns="date", values="mentions", aggfunc="sum", fill_value=0
+            index="skill", columns="published", values="mentions", aggfunc="sum", fill_value=0
         ).reindex(columns=months)
         
-        monthly_totals = pivot_df.groupby("date")["job_ids"].apply(
+        monthly_totals = pivot_df.groupby("published")["job_ids"].apply(
             lambda x: len(set([i for sublist in x for i in sublist]))
         ).reindex(months)
         
