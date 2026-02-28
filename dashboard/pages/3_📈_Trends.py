@@ -12,8 +12,8 @@ from utils.dashboard_utils import render_filter_summary
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def get_monthly_totals(_pivot_df):
     """Get monthly totals - cached to avoid recomputation"""
-    months = sorted(_pivot_df["date"].unique())
-    monthly_totals = _pivot_df.groupby("date")["job_ids"].apply(
+    months = sorted(_pivot_df["published"].unique())
+    monthly_totals = _pivot_df.groupby("published")["job_ids"].apply(
         lambda x: len(set([i for sublist in x for i in sublist]))
     ).reindex(months).values
     return months, monthly_totals
@@ -21,9 +21,9 @@ def get_monthly_totals(_pivot_df):
 @st.cache_data(ttl=3600)
 def get_skill_month_matrix(_pivot_df):
     """Get skill-month matrix - cached to avoid recomputation"""
-    months = sorted(_pivot_df["date"].unique())
+    months = sorted(_pivot_df["published"].unique())
     skill_month_matrix = _pivot_df.pivot_table(
-        index="skill", columns="date", values="mentions", aggfunc="sum", fill_value=0
+        index="skill", columns="published", values="mentions", aggfunc="sum", fill_value=0
     ).reindex(columns=months)
     return months, skill_month_matrix
 
@@ -37,7 +37,7 @@ def get_smoothed_trend_for_skills(pivot_df, skill_names, smoothing_alpha=0.7):
     
     # Get skill-month matrix for selected skills only
     skill_month_matrix = pivot_df[pivot_df["skill"].isin(skill_names)].pivot_table(
-        index="skill", columns="date", values="mentions", aggfunc="sum", fill_value=0
+        index="skill", columns="published", values="mentions", aggfunc="sum", fill_value=0
     ).reindex(columns=months)
     
     # Add missing skills (if any) with zeros
@@ -157,7 +157,7 @@ def render_growth_analysis(trends_df, pivot_df):
     st.header("📊 Skill Growth Analysis")
     
     # Convert dates for consistent formatting
-    pivot_df["date"] = pd.to_datetime(pivot_df["date"], format="%Y.0_%m.0")
+    pivot_df["published"] = pd.to_datetime(pivot_df["published"], format="%Y.0_%m.0")
     
     # Category selection with new 5-category system
     st.subheader("Choose Growth Category to Explore")

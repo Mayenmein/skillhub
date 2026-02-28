@@ -1,4 +1,3 @@
-"""Salary Skill Regression Analyzer - Built on existing skill pivot table"""
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LassoCV, RidgeCV
@@ -65,24 +64,24 @@ class SalarySkillRegressionAnalyzer:
         Returns:
             Complete analysis results
         """
-        print("🎯 Starting salary skill regression analysis...")
+        print("Starting salary skill regression analysis...")
         
         # Step 1: Merge salary data with pivot table
         merged_data = self._merge_salary_with_pivot(original_df, skill_pivot_df)
-        print(f"📊 Merged {len(merged_data['X'])} jobs with salary data")
+        print(f"Merged {len(merged_data['X'])} jobs with salary data")
         
         # Step 2: Adjust for location if needed
         if adjust_for_location and self.location_column in merged_data['X'].columns:
             merged_data = self._adjust_salaries_for_location(
                 merged_data, reference_location
             )
-            print(f"📍 Applied location adjustments")
+            print(f"Applied location adjustments")
         
         # Step 3: Create feature matrix
         X, y, feature_names = self._create_feature_matrix(
             merged_data, include_interactions
         )
-        print(f"🔧 Created {len(feature_names)} features")
+        print(f"Created {len(feature_names)} features")
         
         # Step 4: Fit regression model
         model_results = self._fit_regression_model(X, y)
@@ -160,7 +159,7 @@ class SalarySkillRegressionAnalyzer:
                 X.loc[job_id, skills] = 1
         
         # Add location and other metadata
-        for col in [self.location_column, 'seniority_level', 'cleaned_title_category']:
+        for col in [self.location_column, 'seniority_level', 'standardized_title']:
             if col in salary_df.columns:
                 X[col] = salary_df.set_index('job_id')[col]
         
@@ -262,7 +261,7 @@ class SalarySkillRegressionAnalyzer:
         
         # Filter to only skill columns (remove metadata columns)
         skill_columns = [col for col in X.columns 
-                        if col not in [self.location_column, 'seniority_level', 'cleaned_title_category']]
+                        if col not in [self.location_column, 'seniority_level', 'standardized_title']]
         
         X_skills = X[skill_columns].copy()
         
@@ -274,13 +273,15 @@ class SalarySkillRegressionAnalyzer:
         # Generate interactions if requested
         interaction_features = []
         if include_interactions and len(common_skills) >= 2:
+            # Pass a copy to avoid modifying the original
             interaction_features = self._generate_interaction_features(
-                X_skills, common_skills
+                X_skills.copy(), common_skills
             )
         
-        # Combine all features
+        # Combine all features - X_skills already contains the interaction features
+        # because _generate_interaction_features adds them to the passed dataframe
         all_features = common_skills + interaction_features
-        X_final = pd.concat([X_skills, X[interaction_features]], axis=1) if interaction_features else X_skills
+        X_final = X_skills  # X_skills now includes interaction columns
         
         # Limit total features if needed
         if len(all_features) > self.max_interaction_features:
@@ -673,7 +674,7 @@ class SalarySkillRegressionAnalyzer:
         with open(output_path, 'w') as f:
             json.dump(results_to_save, f, indent=2, default=str)
         
-        print(f"✅ Results saved to {output_path}")
+        print(f" Results saved to {output_path}")
     
     def load_results(self, input_path: str):
         """Load analysis results from file"""
@@ -686,7 +687,7 @@ class SalarySkillRegressionAnalyzer:
                 results[key] = pd.DataFrame(value)
         
         self.results = results
-        print(f"✅ Results loaded from {input_path}")
+        print(f"Results loaded from {input_path}")
         return results
 
 

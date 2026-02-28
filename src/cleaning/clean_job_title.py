@@ -68,30 +68,16 @@ class HybridJobTitleClassifier:
 
     def _load_or_compute_category_embeddings(self) -> np.ndarray:
         """Load pre-computed category embeddings or compute and save them."""
-        try:
-            if os.path.exists(self.category_embeddings_path):
-                print(f"✅ Loading category embeddings from {self.category_embeddings_path}")
-                embeddings = joblib.load(self.category_embeddings_path)
-                if len(embeddings) == len(self.categories):
-                    return embeddings
-                else:
-                    print("⚠️  Category mismatch, recomputing embeddings...")
-        except Exception as e:
-            print(f"⚠️  Could not load embeddings: {e}. Recomputing...")
-        
+               
         # Compute embeddings if not loaded
-        print("🔧 Computing category embeddings...")
+        print("Computing category embeddings...")
         embeddings = self.model.encode(
             self.categories, 
             normalize_embeddings=True,
             show_progress_bar=False,
             batch_size=32  # Optimized for CPU
         )
-        
-        # Save for future use
-        joblib.dump(embeddings, self.category_embeddings_path)
-        print(f"✅ Saved category embeddings to {self.category_embeddings_path}")
-        
+                
         return embeddings
 
     def extract_seniority(self, title: str) -> str:
@@ -142,7 +128,7 @@ class HybridJobTitleClassifier:
                     results[idx] = future.result()
                 except Exception as e:
                     results[idx] = "Unknown"
-                    print(f"⚠️  Error processing title at index {idx}: {e}")
+                    print(f"Error processing title at index {idx}: {e}")
         
         return results
 
@@ -244,7 +230,7 @@ class HybridJobTitleClassifier:
                 all_scores.append(score)
         
         # Add results to DataFrame
-        df["cleaned_title_category"] = all_categories
+        df["cleaned_title"] = all_categories
         df["seniority_level"] = all_seniorities
         df["similarity_score"] = all_scores
          
@@ -314,41 +300,4 @@ class HybridJobTitleClassifier:
             "seniority": seniority,
             "score": best_score
         }
-
-    def save_state(self, cache_path: Optional[str] = None):
-        """
-        Persist category embeddings and optionally title cache.
-        
-        Args:
-            cache_path: Optional path to save title cache
-        """
-        # Save category embeddings
-        joblib.dump(self.category_embeddings, self.category_embeddings_path)
-        print(f"✅ Saved category embeddings: {len(self.categories)} categories")
-        
-        # Optionally save title cache
-        if cache_path and self.title_cache:
-            joblib.dump(self.title_cache, cache_path)
-            print(f"✅ Saved title cache: {len(self.title_cache)} entries")
-
-    def load_cache(self, cache_path: str):
-        """
-        Load title cache from file.
-        
-        Args:
-            cache_path: Path to cache file
-        """
-        try:
-            if os.path.exists(cache_path):
-                self.title_cache = joblib.load(cache_path)
-                print(f"✅ Loaded title cache: {len(self.title_cache)} entries")
-            else:
-                print(f"⚠️  Cache file not found: {cache_path}")
-        except Exception as e:
-            print(f"⚠️  Could not load cache: {e}")
-
-    def clear_cache(self):
-        """Clear the title cache."""
-        cache_size = len(self.title_cache)
-        self.title_cache = {}
-        print(f"✅ Cleared cache: {cache_size} entries removed")
+  

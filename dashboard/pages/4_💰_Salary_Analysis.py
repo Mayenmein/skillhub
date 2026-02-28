@@ -78,9 +78,9 @@ def render_earning_potential(df):
     # Role-based earning potential
     st.subheader("💼 Choose Your Path: Role Comparison")
     
-    if "cleaned_title_category" in salary_data.columns:
+    if "standardized_title" in salary_data.columns:
         # Show top paying roles
-        role_salaries = salary_data.groupby("cleaned_title_category")["avg_salary_usd"].median().sort_values(ascending=False).head(8)
+        role_salaries = salary_data.groupby("standardized_title")["avg_salary_usd"].median().sort_values(ascending=False).head(8)
         
         fig_roles = px.bar(
             x=role_salaries.values,
@@ -101,7 +101,7 @@ def render_earning_potential(df):
             selected_role = st.selectbox("Explore salary for:", available_roles)
         
         if selected_role:
-            role_data = salary_data[salary_data['cleaned_title_category'] == selected_role]
+            role_data = salary_data[salary_data['standardized_title'] == selected_role]
             
             with col2:
                 role_median = role_data['avg_salary_usd'].median()
