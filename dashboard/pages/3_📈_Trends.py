@@ -157,7 +157,7 @@ def render_growth_analysis(trends_df, pivot_df):
     st.header("📊 Skill Growth Analysis")
     
     # Convert dates for consistent formatting
-    pivot_df["published"] = pd.to_datetime(pivot_df["published"], format="%Y.0_%m.0")
+    pivot_df["published"] = pd.to_datetime(pivot_df["published"], format="%Y_%m")
     
     # Category selection with new 5-category system
     st.subheader("Choose Growth Category to Explore")

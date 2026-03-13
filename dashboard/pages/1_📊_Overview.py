@@ -180,8 +180,7 @@ def main():
     col7, col8, col9, col10 = st.columns(4)
     
     with col7:
-        if not filtered_df.empty: 
-            dashboard_manager.df['skill_counts'] = dashboard_manager.df['skills'].apply(len)
+        if not filtered_df.empty:  
             skills_per_job = dashboard_manager.df['skill_counts'].mean()
             st.metric("Avg Skills per Job", f"{skills_per_job:.1f}")
     

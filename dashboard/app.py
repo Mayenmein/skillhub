@@ -1,34 +1,28 @@
 # dashboard/app.py
 
 import streamlit as st
-import pandas as pd 
-import numpy as np
-import plotly.express as px
+import pandas as pd  
 import plotly.graph_objects as go 
 from pathlib import Path 
-import sys
-import networkx as nx
-from typing import Dict, List
-from datetime import datetime
-
-from functools import lru_cache
+import sys 
+from typing import Dict 
+from datetime import datetime 
 
 # Add project root to path for imports
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 # Import refactored analysis modules
-from src.main import DataScienceJobsAnalyzer
-from src.core.data_processor import DataProcessor
+from src.analysis.main import DataScienceJobsAnalyzer 
 from src.analysis.skill_analyzer import SkillAnalyzer
 from src.analysis.trend_analyzer import TrendAnalyzer
 from src.analysis.seniority_analyzer import SeniorityAnalyzer
 from src.analysis.role_analyzer import RoleAnalyzer
 from src.analysis.ecosystem_analyzer import EcosystemAnalyzer
-
+from src.analysis.analyze_jobs import BaseAnalyzer
 from src.utils.calculations import *
 
-st.set_option("client.showErrorDetails", True)
+st.set_option("client.showErrorDetails", True)  
 
 # Configure the page
 st.set_page_config(
@@ -72,14 +66,13 @@ class DashboardManager:
         """Initialize the dashboard manager with refactored components"""
         self.data_dir = data_dir
         
-        # Initialize individual analyzers for specific functionality
-        self.data_processor = DataProcessor(data_dir)
+        # Initialize individual analyzers for specific functionality 
         self.skill_analyzer = SkillAnalyzer(data_dir)
         self.trend_analyzer = TrendAnalyzer(data_dir)
         self.seniority_analyzer = SeniorityAnalyzer(data_dir)
         self.role_analyzer = RoleAnalyzer(data_dir)
         self.ecosystem_analyzer = EcosystemAnalyzer(data_dir)
-        
+        self.base_analyzer = BaseAnalyzer(data_dir)
         # For full analysis pipeline
         self.full_analyzer = DataScienceJobsAnalyzer(data_dir)
         
@@ -100,8 +93,8 @@ class DashboardManager:
         """Load and process data if not already available"""
         if self.df.empty:
             try:
-                self.df = self.data_processor.load_cleaned_data()
-                self.skills_df = self.data_processor.create_skill_pivot(self.df)
+                self.df = self.base_analyzer.load_cleaned_data()
+                self.skills_df = self.base_analyzer.create_skill_pivot(self.df)
             except Exception as e:
                 st.error(f"Error loading data: {e}")
              
@@ -131,8 +124,8 @@ class DashboardManager:
             st.subheader("📅 Date Range Filter")
             if 'published' in filtered_df.columns and not filtered_df.empty:
                 try:
-                    min_date = pd.to_datetime(filtered_df['published'], format='%Y.0_%m.0').min()
-                    max_date = pd.to_datetime(filtered_df['published'], format='%Y.0_%m.0').max()
+                    min_date = pd.to_datetime(filtered_df['published'], format='%Y_%m').min()
+                    max_date = pd.to_datetime(filtered_df['published'], format='%Y_%m').max()
                     
                     date_range = st.date_input(
                         "Select Date Range",
@@ -147,8 +140,8 @@ class DashboardManager:
                     if len(date_range) == 2 and date_range[0] and date_range[1]:
                         start_date, end_date = date_range
                         filtered_df = filtered_df[
-                            (pd.to_datetime(filtered_df['published'], format='%Y.0_%m.0') >= pd.to_datetime(start_date)) & 
-                            (pd.to_datetime(filtered_df['published'], format='%Y.0_%m.0') <= pd.to_datetime(end_date))
+                            (pd.to_datetime(filtered_df['published'], format='%Y_%m') >= pd.to_datetime(start_date)) & 
+                            (pd.to_datetime(filtered_df['published'], format='%Y_%m') <= pd.to_datetime(end_date))
                         ]
                 except Exception as e:
                     st.warning(f"Date filtering may not work properly: {e}")
@@ -277,12 +270,12 @@ class DashboardManager:
                 end_date = pd.to_datetime(end_date)
                 
                 df_filtered = df_filtered[
-                    (pd.to_datetime(df_filtered['published'], format='%Y.0_%m.0') >= start_date) &  
-                    (pd.to_datetime(df_filtered['published'], format='%Y.0_%m.0') <= end_date)
+                    (pd.to_datetime(df_filtered['published'], format='%Y_%m') >= start_date) &  
+                    (pd.to_datetime(df_filtered['published'], format='%Y_%m') <= end_date)
                 ]
                 main_df = main_df[
-                    (pd.to_datetime(main_df['published'], format='%Y.0_%m.0') >= start_date) & 
-                    (pd.to_datetime(main_df['published'], format='%Y.0_%m.0') <= end_date)
+                    (pd.to_datetime(main_df['published'], format='%Y_%m') >= start_date) & 
+                    (pd.to_datetime(main_df['published'], format='%Y_%m') <= end_date)
                 ]
         
         # Country filter
