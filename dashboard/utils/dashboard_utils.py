@@ -23,7 +23,7 @@ def render_filter_summary(filters: Dict, filtered_df: pd.DataFrame, total_df: pd
                 pass
 
         # Common categorical filters
-        for key in ['country', 'company', 'primary_job_type', 'cleaned_title_category', 'seniority_level']:
+        for key in ['country', 'company_name', 'primary_job_type', 'standardized_title', 'seniority_level']:
             val = filters.get(key)
             if val and val != 'All':
                 pretty = key.replace('_', ' ').title()
@@ -71,7 +71,7 @@ def render_metrics(df: pd.DataFrame):
     
     with col2:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        companies = df['company'].nunique()
+        companies = df['company_name'].nunique()
         st.metric("Companies", f"{companies:,}")
         st.markdown('</div>', unsafe_allow_html=True)
     

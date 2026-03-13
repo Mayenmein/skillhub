@@ -43,14 +43,14 @@ def main():
     
     with col1:
         # Top companies
-        if 'company' in main_df.columns:
-            top_companies = main_df['company'].value_counts().head(8)
+        if 'company_name' in main_df.columns:
+            top_companies = main_df['company_name'].value_counts().head(8)
             fig = px.bar(
                 x=top_companies.values,
                 y=top_companies.index,
                 orientation='h',
                 title='Top Companies by Job Count',
-                labels={'x': 'Number of Jobs', 'y': 'Company'},
+                labels={'x': 'Number of Jobs', 'y': 'company_name'},
                 color=top_companies.values,
                 color_continuous_scale='Blues'
             )
@@ -59,8 +59,8 @@ def main():
     
     with col2:
         # Role distribution
-        if 'cleaned_title_category' in main_df.columns:
-            role_dist = main_df['cleaned_title_category'].value_counts().head(8)
+        if 'standardized_title' in main_df.columns:
+            role_dist = main_df['standardized_title'].value_counts().head(8)
             fig = px.pie(
                 values=role_dist.values,
                 names=role_dist.index,
@@ -107,9 +107,9 @@ def main():
     
     if not filtered_df.empty:
         # Aggregate skills data using DataProcessor
-        skill_df = dashboard_manager.data_processor.aggregate_pivot(filtered_df, metric='prevalence')
+        skill_df = dashboard_manager.base_analyzer.aggregate_pivot(filtered_df, metric='prevalence')
         skill_df['prevalence'] = skill_df['prevalence'].round(1)
-        category_df = dashboard_manager.data_processor.aggregate_pivot(filtered_df, column='skill_category')
+        category_df = dashboard_manager.base_analyzer.aggregate_pivot(filtered_df, column='skill_category')
         
         col5, col6 = st.columns(2)
         
@@ -149,20 +149,20 @@ def main():
     st.markdown("---")
     st.subheader("📅 Market Trends Over Time")
     
-    if 'date' in main_df.columns and not main_df.empty:
+    if 'published' in main_df.columns and not main_df.empty:
         try:
             # Convert date and aggregate by month
-            main_df['date_dt'] = pd.to_datetime(main_df['date'], format='%Y.0_%m.0')
+            main_df['date_dt'] = pd.to_datetime(main_df['published'], format='%Y_%m')
             monthly_trends = main_df.groupby(main_df['date_dt'].dt.to_period('M')).size().reset_index()
             monthly_trends['date_dt'] = monthly_trends['date_dt'].dt.to_timestamp()
-            monthly_trends.columns = ['date', 'job_count']
+            monthly_trends.columns = ['published', 'job_count']
             
             fig = px.line(
                 monthly_trends,
-                x='date',
+                x='published',
                 y='job_count',
                 title='Monthly Job Postings Trend',
-                labels={'date': 'Month', 'job_count': 'Number of Jobs'},
+                labels={'published': 'Month', 'job_count': 'Number of Jobs'},
                 markers=True
             )
             fig.update_layout(
@@ -180,24 +180,26 @@ def main():
     col7, col8, col9, col10 = st.columns(4)
     
     with col7:
-        if not filtered_df.empty:
-            skills_per_job = dashboard_manager.df['skills_count'].mean()
+        if not filtered_df.empty: 
+            dashboard_manager.df['skill_counts'] = dashboard_manager.df['skills'].apply(len)
+            skills_per_job = dashboard_manager.df['skill_counts'].mean()
             st.metric("Avg Skills per Job", f"{skills_per_job:.1f}")
     
     with col8:
-        if 'company' in main_df.columns:
-            jobs_per_company = len(main_df) / main_df['company'].nunique()
+        if 'company_name' in main_df.columns:
+            jobs_per_company = len(main_df) / main_df['company_name'].nunique()
             st.metric("Avg Jobs per Company", f"{jobs_per_company:.1f}")
     
     with col9:
-        if 'cleaned_title_category' in main_df.columns:
-            role_diversity = main_df['cleaned_title_category'].nunique()
+        if 'standardized_title' in main_df.columns:
+            role_diversity = main_df['standardized_title'].nunique()
             st.metric("Role Categories", f"{role_diversity}")
     
     with col10:
-        if 'date' in main_df.columns:
+        if 'published' in main_df.columns:
+            
             try:
-                date_range = pd.to_datetime(main_df['date'], format='%Y.0_%m.0')
+                date_range = pd.to_datetime(main_df['published'], format='%Y_%m')
                 date_span = (date_range.max() - date_range.min()).days
                 st.metric("Data Time Span", f"{date_span} days")
             except:
@@ -223,8 +225,8 @@ def main():
             st.metric("Skills Coverage", f"{skills_coverage:.1f}%")
     
     with col14:
-        if 'avg_salary_usd' in main_df.columns:
-            salary_completeness = (main_df['avg_salary_usd'].notna().sum() / len(main_df)) * 100
+        if 'salary' in main_df.columns:
+            salary_completeness = ((main_df['salary'] > 0).sum() / len(main_df)) * 100
             st.metric("Salary Data", f"{salary_completeness:.1f}%")
         else:
             st.metric("Salary Data", "0%")

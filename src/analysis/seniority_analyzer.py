@@ -2,15 +2,18 @@
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from src.core.base_analyzer import BaseAnalyzer
+import logging
 from src.analysis.skill_analyzer import SkillAnalyzer
-
-class SeniorityAnalyzer(SkillAnalyzer):
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)  
+class SeniorityAnalyzer(SkillAnalyzer): 
+        
     def analyze_seniority_specific_patterns(self, pivot_df: pd.DataFrame, progression_df: pd.DataFrame, 
                                       importance_threshold: float = 1.2, top_n_skills: int = 5, 
                                       max_specific_skills: int = 3) -> dict:
         """Analyze seniority-specific skill patterns"""
-        self.logger.info("🎯 Identifying seniority-specific skill patterns...")
+        logger.info("Identifying seniority-specific skill patterns...")
         seniority_patterns = {}
         
         for level in tqdm(self.seniority_order, desc="Analyzing seniority patterns"):
@@ -93,25 +96,25 @@ class SeniorityAnalyzer(SkillAnalyzer):
     
     def _generate_seniority_insights(self, seniority_patterns: dict):
         """Generate insights from seniority-specific patterns"""
-        self.logger.info("\n" + "="*70)
-        self.logger.info("🎯 SENIORITY-SPECIFIC SKILL PATTERNS INSIGHTS")
-        self.logger.info("="*70)
+        logger.info("\n" + "="*70)
+        logger.info("SENIORITY-SPECIFIC SKILL PATTERNS INSIGHTS")
+        logger.info("="*70)
         
         for level, patterns in seniority_patterns.items():
-            self.logger.info(f"\n📋 {level.upper()} LEVEL:")
-            self.logger.info(f"   • Total jobs: {patterns['total_jobs']:,}")
-            self.logger.info(f"   • Unique skills: {patterns['total_skills']}")
-            self.logger.info(f"   • Skill concentration: {patterns['skill_diversity']['concentration_index']:.3f}")
+            logger.info(f"\n{level.upper()} LEVEL:")
+            logger.info(f"   • Total jobs: {patterns['total_jobs']:,}")
+            logger.info(f"   • Unique skills: {patterns['total_skills']}")
+            logger.info(f"   • Skill concentration: {patterns['skill_diversity']['concentration_index']:.3f}")
             
             top_skills_str = ", ".join([f"{s['skill']} ({s['prevalence']:.1f}%)" 
                                     for s in patterns['top_skills'][:3]])
-            self.logger.info(f"   • Top skills: {top_skills_str}")
+            logger.info(f"   • Top skills: {top_skills_str}")
             
             if patterns['level_specific_skills']:
                 specific_skills_str = ", ".join([
                     f"{s['skill']} ({s['importance_ratio']:.1f}x)" 
                     for s in patterns['level_specific_skills']
                 ])
-                self.logger.info(f"   • Level-specific: {specific_skills_str}")
+                logger.info(f"   • Level-specific: {specific_skills_str}")
             else:
-                self.logger.info("   • Level-specific: No strongly specific skills identified")
+                logger.info("   • Level-specific: No strongly specific skills identified")

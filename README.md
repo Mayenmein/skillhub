@@ -11,9 +11,11 @@
 **Transform raw job market data into actionable career intelligence for data professionals.**
 
 ## Overview
+## Overview
 
 SkillHub analyzes real-time data science job postings to identify skill demand trends, helping professionals make data-driven career decisions. From scraping job boards to interactive visualizations, we bridge the gap between market needs and career development.
 
+### The Challenge
 ### The Challenge
 - Data science skills evolve faster than traditional career advice
 - Professionals waste time learning obsolete or low-demand technologies
@@ -21,8 +23,10 @@ SkillHub analyzes real-time data science job postings to identify skill demand t
 - Educational programs struggle to keep curricula industry-relevant
 
 ### Our Solution
+### Our Solution
 An end-to-end analytics platform that transforms job posting data into clear, actionable insights through an intuitive dashboard, enabling smarter career decisions across the data science ecosystem.
 
+## Who It's For
 ## Who It's For
 
 | Role | Primary Use Case |
@@ -31,29 +35,40 @@ An end-to-end analytics platform that transforms job posting data into clear, ac
 | **Data Professionals** | Strategic upskilling based on market trends |
 | **HR & Recruiters** | Data-driven talent acquisition and planning |
 | **Educators** | Curriculum aligned with industry demands |
+| **Students & Graduates** | Identify high-demand skills for job readiness |
+| **Data Professionals** | Strategic upskilling based on market trends |
+| **HR & Recruiters** | Data-driven talent acquisition and planning |
+| **Educators** | Curriculum aligned with industry demands |
 
+## Key Features
 ## Key Features
 
 ### Real-Time Market Intelligence
+### Real-Time Market Intelligence
 - **Live skill demand tracking** across 100+ data science technologies
+- **Growth/decline classification** (Emerging, Growing, Stable, Declining)
 - **Growth/decline classification** (Emerging, Growing, Stable, Declining)
 - **Market share analysis** by industry and experience level
 
+### Career Decision Support
 ### Career Decision Support
 - **Personalized skill recommendations** based on career goals
 - **Learning roadmap generator** with estimated timelines
 - **Salary correlation insights** for skill combinations
 
 ### Interactive Analytics
+### Interactive Analytics
 - **Comparative skill analysis** with side-by-side visualizations
 - **Historical trend tracking** with predictive indicators
 - **Industry-specific heat maps** and demand patterns
 
 ### End-to-End Pipeline
+### End-to-End Pipeline
 - **Automated data collection** from major job platforms
 - **Intelligent skill standardization** and categorization
 - **Real-time dashboard updates** with fresh insights
 
+## How It Works
 ## How It Works
 
 <img src="docs/images/flow_chart.png" alt="System Architecture" width="500"> 
@@ -62,6 +77,10 @@ An end-to-end analytics platform that transforms job posting data into clear, ac
 Scrape and aggregate job postings from LinkedIn, Indeed, and specialized data science boards, capturing skills, requirements, and compensation data.
 
 ### 2. Processing & Analysis
+- Clean and standardize 500+ data science skills using pandas
+- Create skill pivot tables for multi-dimensional analysis
+- Calculate demand growth rates and market positions
+- Identify emerging trends and declining technologies
 - Clean and standardize 500+ data science skills using pandas
 - Create skill pivot tables for multi-dimensional analysis
 - Calculate demand growth rates and market positions
@@ -89,13 +108,38 @@ Our regression analysis reveals that **skills alone explain approximately 6% of 
 - Use our skill premium rankings for **relative comparisons**, not absolute predictions
 - Focus on skill combinations that show positive synergy effects
 - Consider skills as one piece of your career strategy, alongside experience-building and networking
+- Interactive Streamlit dashboard with real-time updates
+- Comparative analysis tools and trend forecasting
+- Downloadable reports and personalized recommendations
+
+## Methodology & Key Findings
+
+### Skill Trend Analysis
+Skills are classified using a proprietary **volume-adjusted momentum score** that combines:
+- Recent growth momentum (3-month rolling average)
+- Baseline mention volume for statistical significance
+- Non-linear trend detection for emerging vs. peaking classification
+
+### Salary-Skill Analysis ⚠️
+Our regression analysis reveals that **skills alone explain approximately 6% of salary variation** (R² = 0.062). This honest finding underscores an important reality:
+
+> *While technical skills matter, factors like years of experience, company size, industry, location, and individual negotiation play substantially larger roles in determining actual compensation.*
+
+**What this means for you:**
+- Use our skill premium rankings for **relative comparisons**, not absolute predictions
+- Focus on skill combinations that show positive synergy effects
+- Consider skills as one piece of your career strategy, alongside experience-building and networking
 
 ## Quick Start
 
 ### Prerequisites
 - Python 3.9+
 - pip package manager
+### Prerequisites
+- Python 3.9+
+- pip package manager
 
+```bash
 ```bash
 # Clone repository
 git clone https://github.com/Mayenmein/skillhub.git

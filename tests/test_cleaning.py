@@ -307,8 +307,8 @@ class TestHybridJobTitleClassifier:
 
         assert isinstance(result, pd.DataFrame)
         assert len(result) == len(df)
-        assert {"cleaned_title_category", "seniority_level", "similarity_score"}.issubset(result.columns)
-        assert result["cleaned_title_category"].notna().all()
+        assert {"standardized_title", "seniority_level", "similarity_score"}.issubset(result.columns)
+        assert result["standardized_title"].notna().all()
 
     def test_save_state(self, classifier):
         classifier.clusters = {"Cluster A": np.array([1, 2, 3])}

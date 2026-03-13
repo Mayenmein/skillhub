@@ -60,7 +60,7 @@ def mock_df():
     return pd.DataFrame({
         "country": ["US", "US", "UK", "UK"],
         "company": ["A", "B", "A", "C"],
-        "cleaned_title_category": ["Data Scientist"] * 4,
+        "standardized_title": ["Data Scientist"] * 4,
         "seniority_level": ["Junior", "Mid-level", "Senior", "Junior"],
         "skills": [["Python", "SQL"], ["Python"], ["R", "Spark"], ["SQL"]],
         "published_year": [2025, 2025, 2025, 2025],
