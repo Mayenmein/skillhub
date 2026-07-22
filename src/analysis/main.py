@@ -5,7 +5,7 @@ from src.analysis.trend_analyzer import TrendAnalyzer
 from src.analysis.seniority_analyzer import SeniorityAnalyzer
 from src.analysis.role_analyzer import RoleAnalyzer
 from src.analysis.ecosystem_analyzer import EcosystemAnalyzer
-from src.analysis.salary_analyzer import SalarySkillRegressionAnalyzer
+from src.analysis.salary_analyzer import SalarySkillResidualAnalyzer
 
 from src.visualizations.market_analysis_plot import MarketAnalysisPlot
 from src.visualizations.role_analysis_plot import RoleAnalysisPlot

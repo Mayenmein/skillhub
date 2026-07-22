@@ -2,7 +2,7 @@
 .env
 .env.local
 *.env
-
+demo/
 # Database credentials
 **/database.ini
 **/db_config.json

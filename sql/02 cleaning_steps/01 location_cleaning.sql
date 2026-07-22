@@ -1,136 +1,226 @@
 -- Country Cleaning Script for jobs_cleaned table
 -- Run this after creating jobs_cleaned table
 
--- First, create a backup of original country values (optional but recommended)
 ALTER TABLE jobs_cleaned ADD COLUMN IF NOT EXISTS country_original VARCHAR(255);
 UPDATE jobs_cleaned SET country_original = country;
 
 -- United States variations
-UPDATE jobs_cleaned SET country = 'United States' WHERE UPPER(country) IN ('US', 'USA', 'U.S.', 'UNITED STATES', 'UNITED STATES OF AMERICA', 'CA US');
+UPDATE jobs_cleaned
+SET country = 'United States'
+WHERE LOWER(country) ~
+      '(^|[^a-z])(usa|u[[:space:].]*s[[:space:].]*a|u[[:space:].]*s|united[[:space:]]+states|united[[:space:]]+states[[:space:]]+of[[:space:]]+america)([^a-z]|$)';
 
 -- US States (all 50 states + DC)
-UPDATE jobs_cleaned SET country = 'United States' WHERE UPPER(country) IN (
-    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 
-    'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 
-    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 
-    'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
-);
+UPDATE jobs_cleaned
+SET country = 'United States'
+WHERE country <> 'United States'
+  AND country ~* '\m(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WV|WI|WY|DC)\M';
 
 -- United Kingdom variations
-UPDATE jobs_cleaned SET country = 'United Kingdom' WHERE UPPER(country) IN ('UK', 'UNITED KINGDOM', 'ENGLAND');
+UPDATE jobs_cleaned
+SET country = 'United Kingdom'
+WHERE country ~* '\m(UK|United[[:space:]]+Kingdom|England)\M';
 
 -- France variations
-UPDATE jobs_cleaned SET country = 'France' WHERE UPPER(country) IN ('FR', 'FRANCE');
+-- France
+UPDATE jobs_cleaned
+SET country = 'France'
+WHERE country ~* '\m(FR|FRANCE)\M';
 
--- South Africa variations
-UPDATE jobs_cleaned SET country = 'South Africa' WHERE UPPER(country) IN ('ZA', 'SOUTH AFRICA');
+-- South Africa
+UPDATE jobs_cleaned
+SET country = 'South Africa'
+WHERE country ~* '\m(ZA|SOUTH[[:space:]]+AFRICA)\M';
 
--- Cyprus variations
-UPDATE jobs_cleaned SET country = 'Cyprus' WHERE UPPER(country) IN ('CY', 'CYPRUS');
+-- Cyprus
+UPDATE jobs_cleaned
+SET country = 'Cyprus'
+WHERE country ~* '\m(CY|CYPRUS)\M';
 
--- Ukraine variations
-UPDATE jobs_cleaned SET country = 'Ukraine' WHERE UPPER(country) IN ('UA', 'UKRAINE');
+-- Ukraine
+UPDATE jobs_cleaned
+SET country = 'Ukraine'
+WHERE country ~* '\m(UA|UKRAINE)\M';
 
--- Italy variations
-UPDATE jobs_cleaned SET country = 'Italy' WHERE UPPER(country) IN ('IT', 'ITALY');
+-- Italy
+UPDATE jobs_cleaned
+SET country = 'Italy'
+WHERE country ~* '\m(IT|ITALY)\M';
 
--- Morocco variations
-UPDATE jobs_cleaned SET country = 'Morocco' WHERE UPPER(country) IN ('MAROC', 'MOROCCO');
+-- Morocco
+UPDATE jobs_cleaned
+SET country = 'Morocco'
+WHERE country ~* '\m(MAROC|MOROCCO)\M';
 
--- Czech Republic variations
-UPDATE jobs_cleaned SET country = 'Czech Republic' WHERE UPPER(country) IN ('CZECHIA', 'CZECH REPUBLIC');
+-- Czech Republic
+UPDATE jobs_cleaned
+SET country = 'Czech Republic'
+WHERE country ~* '\m(CZECHIA|CZECH[[:space:]]+REPUBLIC)\M';
 
--- Bosnia and Herzegovina variations
-UPDATE jobs_cleaned SET country = 'Bosnia and Herzegovina' WHERE UPPER(country) IN ('BOSNIA', 'BOSNIA AND HERZEGOVINA');
+-- Bosnia and Herzegovina
+UPDATE jobs_cleaned
+SET country = 'Bosnia and Herzegovina'
+WHERE country ~* '\m(BOSNIA|BOSNIA[[:space:]]+AND[[:space:]]+HERZEGOVINA)\M';
 
--- South Korea variations
-UPDATE jobs_cleaned SET country = 'South Korea' WHERE UPPER(country) IN ('KOREA', 'SOUTH KOREA', 'KOREA, REPUBLIC OF');
+-- South Korea
+UPDATE jobs_cleaned
+SET country = 'South Korea'
+WHERE country ~* '\m(KOREA|SOUTH[[:space:]]+KOREA|KOREA,[[:space:]]+REPUBLIC[[:space:]]+OF)\M';
 
--- Turkey variations
-UPDATE jobs_cleaned SET country = 'Turkey' WHERE UPPER(country) IN ('TURKIYE', 'TURKEY', 'TR');
+-- Turkey
+UPDATE jobs_cleaned
+SET country = 'Turkey'
+WHERE country ~* '\m(TURKIYE|TURKEY|TR)\M';
 
--- Tunisia variations
-UPDATE jobs_cleaned SET country = 'Tunisia' WHERE UPPER(country) IN ('TUNISIE', 'TUNISIA');
+-- Tunisia
+UPDATE jobs_cleaned
+SET country = 'Tunisia'
+WHERE country ~* '\m(TUNISIE|TUNISIA)\M';
 
--- Brazil variations
-UPDATE jobs_cleaned SET country = 'Brazil' WHERE UPPER(country) IN ('BRASIL', 'BRAZIL', 'BR');
+-- Brazil
+UPDATE jobs_cleaned
+SET country = 'Brazil'
+WHERE country ~* '\m(BRASIL|BRAZIL|BR)\M';
 
--- Japan variations
-UPDATE jobs_cleaned SET country = 'Japan' WHERE UPPER(country) IN ('JP', 'JAPAN');
+-- Japan
+UPDATE jobs_cleaned
+SET country = 'Japan'
+WHERE country ~* '\m(JP|JAPAN)\M';
 
--- Uruguay variations
-UPDATE jobs_cleaned SET country = 'Uruguay' WHERE UPPER(country) IN ('UY', 'URUGUAY');
+-- Uruguay
+UPDATE jobs_cleaned
+SET country = 'Uruguay'
+WHERE country ~* '\m(UY|URUGUAY)\M';
 
--- Philippines variations
-UPDATE jobs_cleaned SET country = 'Philippines' WHERE UPPER(country) IN ('PH', 'PHILIPPINES');
+-- Philippines
+UPDATE jobs_cleaned
+SET country = 'Philippines'
+WHERE country ~* '\m(PH|PHILIPPINES)\M';
 
--- Singapore variations
-UPDATE jobs_cleaned SET country = 'Singapore' WHERE UPPER(country) IN ('SG', 'SINGAPORE');
+-- Singapore
+UPDATE jobs_cleaned
+SET country = 'Singapore'
+WHERE country ~* '\m(SG|SINGAPORE)\M';
 
--- Netherlands variations
-UPDATE jobs_cleaned SET country = 'Netherlands' WHERE UPPER(country) IN ('NL', 'NETHERLANDS', 'THE NETHERLANDS');
+-- Netherlands
+UPDATE jobs_cleaned
+SET country = 'Netherlands'
+WHERE country ~* '\m(NL|NETHERLANDS|THE[[:space:]]+NETHERLANDS)\M';
 
--- Sweden variations
-UPDATE jobs_cleaned SET country = 'Sweden' WHERE UPPER(country) IN ('SE', 'SWEDEN');
+-- Sweden
+UPDATE jobs_cleaned
+SET country = 'Sweden'
+WHERE country ~* '\m(SE|SWEDEN)\M';
 
--- Switzerland variations
-UPDATE jobs_cleaned SET country = 'Switzerland' WHERE UPPER(country) IN ('CH', 'SWITZERLAND');
+-- Switzerland
+UPDATE jobs_cleaned
+SET country = 'Switzerland'
+WHERE country ~* '\m(CH|SWITZERLAND)\M';
 
--- Greece variations
-UPDATE jobs_cleaned SET country = 'Greece' WHERE UPPER(country) IN ('GR', 'GREECE');
+-- Greece
+UPDATE jobs_cleaned
+SET country = 'Greece'
+WHERE country ~* '\m(GR|GREECE)\M';
 
--- India variations
-UPDATE jobs_cleaned SET country = 'India' WHERE UPPER(country) IN ('IN', 'INDIA');
+-- India
+UPDATE jobs_cleaned
+SET country = 'India'
+WHERE country ~* '\m(IN|INDIA)\M';
 
--- Portugal variations
-UPDATE jobs_cleaned SET country = 'Portugal' WHERE UPPER(country) IN ('PT', 'PORTUGAL');
+-- Portugal
+UPDATE jobs_cleaned
+SET country = 'Portugal'
+WHERE country ~* '\m(PT|PORTUGAL)\M';
 
--- Australia variations
-UPDATE jobs_cleaned SET country = 'Australia' WHERE UPPER(country) IN ('AU', 'AUSTRALIA');
+-- Australia
+UPDATE jobs_cleaned
+SET country = 'Australia'
+WHERE country ~* '\m(AU|AUSTRALIA)\M';
 
--- New Zealand variations
-UPDATE jobs_cleaned SET country = 'New Zealand' WHERE UPPER(country) IN ('NZ', 'NEW ZEALAND');
+-- New Zealand
+UPDATE jobs_cleaned
+SET country = 'New Zealand'
+WHERE country ~* '\m(NZ|NEW[[:space:]]+ZEALAND)\M';
 
--- Belgium variations
-UPDATE jobs_cleaned SET country = 'Belgium' WHERE UPPER(country) IN ('BE', 'BELGIUM');
+-- Belgium
+UPDATE jobs_cleaned
+SET country = 'Belgium'
+WHERE country ~* '\m(BE|BELGIUM)\M';
 
--- Mexico variations
-UPDATE jobs_cleaned SET country = 'Mexico' WHERE UPPER(country) IN ('MX', 'MEXICO');
+-- Mexico
+UPDATE jobs_cleaned
+SET country = 'Mexico'
+WHERE country ~* '\m(MX|MEXICO)\M';
 
--- Russia variations
-UPDATE jobs_cleaned SET country = 'Russia' WHERE UPPER(country) IN ('RU', 'RUSSIA');
+-- Russia
+UPDATE jobs_cleaned
+SET country = 'Russia'
+WHERE country ~* '\m(RU|RUSSIA)\M';
 
--- Egypt variations
-UPDATE jobs_cleaned SET country = 'Egypt' WHERE UPPER(country) IN ('EG', 'EGYPT');
+-- Egypt
+UPDATE jobs_cleaned
+SET country = 'Egypt'
+WHERE country ~* '\m(EG|EGYPT)\M';
 
--- Finland variations
-UPDATE jobs_cleaned SET country = 'Finland' WHERE UPPER(country) IN ('FI', 'FINLAND');
+-- Finland
+UPDATE jobs_cleaned
+SET country = 'Finland'
+WHERE country ~* '\m(FI|FINLAND)\M';
 
--- Saudi Arabia variations
-UPDATE jobs_cleaned SET country = 'Saudi Arabia' WHERE UPPER(country) IN ('SA', 'SAUDI ARABIA');
+-- Saudi Arabia
+UPDATE jobs_cleaned
+SET country = 'Saudi Arabia'
+WHERE country ~* '\m(SA|SAUDI[[:space:]]+ARABIA)\M';
 
--- Ireland variations
-UPDATE jobs_cleaned SET country = 'Ireland' WHERE UPPER(country) IN ('IE', 'IRELAND');
+-- Ireland
+UPDATE jobs_cleaned
+SET country = 'Ireland'
+WHERE country ~* '\m(IE|IRELAND)\M';
 
--- Germany variations
-UPDATE jobs_cleaned SET country = 'Germany' WHERE UPPER(country) IN ('DE', 'GERMANY');
+-- Germany
+UPDATE jobs_cleaned
+SET country = 'Germany'
+WHERE country ~* '\m(DE|GERMANY)\M';
 
--- Spain variations
-UPDATE jobs_cleaned SET country = 'Spain' WHERE UPPER(country) IN ('ES', 'SPAIN');
+-- Spain
+UPDATE jobs_cleaned
+SET country = 'Spain'
+WHERE country ~* '\m(ES|SPAIN)\M';
 
--- China variations
-UPDATE jobs_cleaned SET country = 'China' WHERE UPPER(country) IN ('CN', 'CHINA');
+-- China
+UPDATE jobs_cleaned
+SET country = 'China'
+WHERE country ~* '\m(CN|CHINA)\M';
 
--- Canada variations
-UPDATE jobs_cleaned SET country = 'Canada' WHERE UPPER(country) IN ('CA', 'CANADA');
+-- Canada
+UPDATE jobs_cleaned
+SET country = 'Canada'
+WHERE country ~* '\m(CA|CANADA)\M';
 
 -- United Arab Emirates
-UPDATE jobs_cleaned SET country = 'United Arab Emirates' WHERE UPPER(country) = 'UAE';
+UPDATE jobs_cleaned
+SET country = 'United Arab Emirates'
+WHERE country ~* '\m(UAE|UNITED[[:space:]]+ARAB[[:space:]]+EMIRATES)\M';
 
--- Handle continent/region entries
-UPDATE jobs_cleaned SET country = 'Europe' WHERE UPPER(country) = 'EUROPE';
-UPDATE jobs_cleaned SET country = 'North America' WHERE UPPER(country) = 'NORTH AMERICA';
-UPDATE jobs_cleaned SET country = 'Latin America' WHERE UPPER(country) = 'LATIN AMERICA';
+-- Continents / regions
+UPDATE jobs_cleaned
+SET country = 'Europe'
+WHERE country ~* '\m(EUROPE)\M';
+
+UPDATE jobs_cleaned
+SET country = 'North America'
+WHERE country ~* '\m(NORTH[[:space:]]+AMERICA)\M';
+
+UPDATE jobs_cleaned
+SET country = 'Latin America'
+WHERE country ~* '\m(LATIN[[:space:]]+AMERICA)\M';
+
+UPDATE jobs_cleaned SET country = TRIM(SPLIT_PART(country, ':', 1)) 
+WHERE country LIKE '%:%';
+
+UPDATE jobs_cleaned
+SET country = TRIM(SPLIT_PART(country, CHR(59), 1))
+WHERE country LIKE '%' || CHR(59) || '%';
 
 -- Handle unknown/empty values
 UPDATE jobs_cleaned SET country = 'Unknown' WHERE country IS NULL OR TRIM(country) = '' OR UPPER(country) IN ('[ ]', 'UNKNOWN');
@@ -140,14 +230,3 @@ UPDATE jobs_cleaned SET country = INITCAP(country);
 
 -- Remove any leading/trailing whitespace that could cause duplicates
 UPDATE jobs_cleaned SET country = TRIM(country); 
-
--- Show summary of changes
-SELECT 
-    country_original,
-    country,
-    COUNT(*) as count
-FROM jobs_cleaned 
-WHERE country_original != country OR country_original IS NULL
-GROUP BY country_original, country
-ORDER BY count DESC
-LIMIT 20;
