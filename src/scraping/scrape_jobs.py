@@ -308,7 +308,7 @@ class JobScraper:
             print("Pages per batch must be greater than 0.")
             return 0
         
-        batch_num, page, total_jobs = 1, 1, 0
+        batch_num, page, total_jobs = 13, 260, 0
         print(f"Scraping {skill} jobs...")
         
         # Main progress bar for overall progress

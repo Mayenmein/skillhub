@@ -1,13 +1,21 @@
-import torch 
-from sentence_transformers import SentenceTransformer, util
-import joblib 
-import re
-import pandas as pd
-import numpy as np
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Tuple, Optional
-import time
+from typing import List, Tuple
+import re
+import torch 
+from sentence_transformers import SentenceTransformer, util
+
+import pandas as pd
+import numpy as np
+
+from dotenv import load_dotenv
+from pathlib import Path
+
+from tqdm import tqdm
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent.parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 class HybridJobTitleClassifier:
     """
@@ -21,13 +29,13 @@ class HybridJobTitleClassifier:
     def __init__(self,
                  model_name="all-MiniLM-L6-v2", 
                  category_embeddings_path="../models/categories.pkl",
-                 cache_folder="C:\\Users\\MARIE\\.cache\\huggingface\\hub"):
+                 cache_folder=os.getenv('cache_folder')):
 
         # Initialize model
         self.model = SentenceTransformer(
             model_name, 
             cache_folder=cache_folder, 
-            local_files_only=True,
+            local_files_only=False,
             device='cpu'  # Explicitly use CPU
         )
         
@@ -132,45 +140,11 @@ class HybridJobTitleClassifier:
         
         return results
 
-    def _process_title_batch(self, titles: List[str], threshold: float) -> Tuple[List[str], List[str], List[float]]:
-        """Process a batch of titles."""
-        # Encode titles
-        title_embeddings = self.model.encode(
-            titles, 
-            normalize_embeddings=True, 
-            show_progress_bar=False,
-            batch_size=64  # Optimized for CPU memory
-        )
-        
-        # Convert to torch tensor
-        title_tensor = torch.tensor(title_embeddings)
-        category_tensor = torch.tensor(self.category_embeddings)
-        
-        # Compute similarities
-        similarities = util.cos_sim(title_tensor, category_tensor)
-        
-        # Get best scores and indices
-        best_scores, best_indices = torch.max(similarities, dim=1)
-        
-        # Convert to numpy
-        best_scores_np = best_scores.numpy()
-        best_indices_np = best_indices.numpy()
-        
-        # Determine categories
-        categories = []
-        for idx, score in zip(best_indices_np, best_scores_np):
-            if score > threshold:
-                categories.append(self.categories[idx])
-            else:
-                categories.append('Other')
-        
-        return categories, best_scores_np
-
     def classify_dataframe(self, 
                       df: pd.DataFrame, 
                       title_col: str, 
                       threshold: float = 0.47,
-                      batch_size: int = 1000 ) -> pd.DataFrame:
+                      batch_size: int = 256 ) -> pd.DataFrame:
         """
         Simplified version without cache complexity - most reliable.
         """ 
@@ -184,19 +158,19 @@ class HybridJobTitleClassifier:
         all_seniorities = []
         all_scores = []
         
-        # Process all titles in batches (no cache)
-        for batch_start in range(0, total_titles, batch_size):
+        # Process all titles in batches with tqdm progress bar
+        for batch_start in tqdm(range(0, total_titles, batch_size), desc="Classifying Dataframe"):
             batch_end = min(batch_start + batch_size, total_titles)
             batch_titles = titles[batch_start:batch_end]
              
             # Extract seniority in parallel
             seniorities_batch = self.extract_seniority_batch(batch_titles)
             
-            # Encode titles
+            # Encode titles (set show_progress_bar=True if you want sub-batch encoding progress)
             title_embeddings = self.model.encode(
                 batch_titles, 
                 normalize_embeddings=True, 
-                show_progress_bar=False,
+                show_progress_bar=False,  # Set to True for inner encoding progress
                 batch_size=64  # Optimized for CPU
             )
             
@@ -235,69 +209,3 @@ class HybridJobTitleClassifier:
         df["similarity_score"] = all_scores
          
         return df
-
-    def classify_single_title(self, title: str, threshold: float = 0.47) -> dict:
-        """
-        Classify a single job title (useful for testing or API).
-        
-        Args:
-            title: Job title string
-            threshold: Similarity threshold
-            
-        Returns:
-            Dictionary with classification results
-        """
-        if not title or not isinstance(title, str):
-            return {
-                "title": title,
-                "category": "Unknown",
-                "seniority": "Unknown",
-                "score": 0.0
-            }
-        
-        # Check cache first
-        if title in self.title_cache:
-            category, seniority, score = self.title_cache[title]
-            return {
-                "title": title,
-                "category": category,
-                "seniority": seniority,
-                "score": float(score)
-            }
-        
-        # Encode title
-        title_embedding = self.model.encode(
-            [title], 
-            normalize_embeddings=True,
-            show_progress_bar=False
-        )[0]
-        
-        # Compute similarities
-        title_tensor = torch.tensor(title_embedding).unsqueeze(0)
-        category_tensor = torch.tensor(self.category_embeddings)
-        
-        similarities = util.cos_sim(title_tensor, category_tensor)
-        best_score, best_idx = torch.max(similarities, dim=1)
-        
-        best_score = best_score.item()
-        best_idx = best_idx.item()
-        
-        # Determine category
-        if best_score > threshold:
-            category = self.categories[best_idx]
-        else:
-            category = 'Other'
-        
-        # Extract seniority
-        seniority = self.extract_seniority(title)
-        
-        # Cache result
-        self.title_cache[title] = (category, seniority, best_score)
-        
-        return {
-            "title": title,
-            "category": category,
-            "seniority": seniority,
-            "score": best_score
-        }
-  

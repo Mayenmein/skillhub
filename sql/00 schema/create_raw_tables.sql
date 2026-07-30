@@ -1,10 +1,5 @@
--- Drop tables if they exist (in reverse order of dependencies)
-DROP TABLE IF EXISTS job_skills_detail CASCADE;
-DROP TABLE IF EXISTS jobs CASCADE;
-DROP TABLE IF EXISTS companies CASCADE;
-
 -- Create companies table
-CREATE TABLE companies (
+CREATE TABLE IF NOT EXISTS companies (
     -- Core identifiers
     id SERIAL PRIMARY KEY,
     slug VARCHAR(255) UNIQUE NOT NULL,
@@ -70,7 +65,7 @@ CREATE TABLE companies (
 );
 
 -- Create jobs table
-CREATE TABLE jobs (
+CREATE TABLE IF NOT EXISTS jobs (
     -- Core identifiers
     id SERIAL PRIMARY KEY,
     slug VARCHAR(255) UNIQUE NOT NULL,
@@ -124,7 +119,7 @@ CREATE TABLE jobs (
 );
 
 -- Create job_skills_detail table for normalized skill tracking
-CREATE TABLE job_skills_detail (
+CREATE TABLE IF NOT EXISTS job_skills_detail (
     id SERIAL PRIMARY KEY,
     job_slug VARCHAR(255) REFERENCES jobs(slug) ON DELETE CASCADE,
     skill_name VARCHAR(255) NOT NULL,
@@ -136,51 +131,51 @@ CREATE TABLE job_skills_detail (
 );
 
 -- Create indexes for companies table
-CREATE INDEX idx_companies_name ON companies(name);
-CREATE INDEX idx_companies_slug ON companies(slug);
-CREATE INDEX idx_companies_country ON companies(country);
-CREATE INDEX idx_companies_city ON companies(city);
-CREATE INDEX idx_companies_sector ON companies(company_sector);
-CREATE INDEX idx_companies_year_founded ON companies(year_founded);
-CREATE INDEX idx_companies_linkedin_staff ON companies(linkedin_staff_count);
-CREATE INDEX idx_companies_jobs_count ON companies(jobs_count);
-CREATE INDEX idx_companies_ai_jobs_count ON companies(jobs_ai_count);
+CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name);
+CREATE INDEX IF NOT EXISTS idx_companies_slug ON companies(slug);
+CREATE INDEX IF NOT EXISTS idx_companies_country ON companies(country);
+CREATE INDEX IF NOT EXISTS idx_companies_city ON companies(city);
+CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(company_sector);
+CREATE INDEX IF NOT EXISTS idx_companies_year_founded ON companies(year_founded);
+CREATE INDEX IF NOT EXISTS idx_companies_linkedin_staff ON companies(linkedin_staff_count);
+CREATE INDEX IF NOT EXISTS idx_companies_jobs_count ON companies(jobs_count);
+CREATE INDEX IF NOT EXISTS idx_companies_ai_jobs_count ON companies(jobs_ai_count);
 
 -- Create indexes for jobs table
-CREATE INDEX idx_jobs_slug ON jobs(slug);
-CREATE INDEX idx_jobs_company_slug ON jobs(company_slug);
-CREATE INDEX idx_jobs_title ON jobs(title);
-CREATE INDEX idx_jobs_published ON jobs(published DESC);
-CREATE INDEX idx_jobs_created ON jobs(created_at_utc DESC);
-CREATE INDEX idx_jobs_country ON jobs(country);
-CREATE INDEX idx_jobs_city ON jobs(city);
-CREATE INDEX idx_jobs_ai ON jobs(ai);
-CREATE INDEX idx_jobs_premium ON jobs(premium);
-CREATE INDEX idx_jobs_status ON jobs(status);
-CREATE INDEX idx_jobs_seniority ON jobs(seniority);
-CREATE INDEX idx_jobs_salary_min ON jobs(salary_min);
-CREATE INDEX idx_jobs_salary_max ON jobs(salary_max);
+CREATE INDEX IF NOT EXISTS idx_jobs_slug ON jobs(slug);
+CREATE INDEX IF NOT EXISTS idx_jobs_company_slug ON jobs(company_slug);
+CREATE INDEX IF NOT EXISTS idx_jobs_title ON jobs(title);
+CREATE INDEX IF NOT EXISTS idx_jobs_published ON jobs(published DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at_utc DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_country ON jobs(country);
+CREATE INDEX IF NOT EXISTS idx_jobs_city ON jobs(city);
+CREATE INDEX IF NOT EXISTS idx_jobs_ai ON jobs(ai);
+CREATE INDEX IF NOT EXISTS idx_jobs_premium ON jobs(premium);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_seniority ON jobs(seniority);
+CREATE INDEX IF NOT EXISTS idx_jobs_salary_min ON jobs(salary_min);
+CREATE INDEX IF NOT EXISTS idx_jobs_salary_max ON jobs(salary_max);
 
 -- Create GIN indexes for array columns (for faster array operations)
-CREATE INDEX idx_jobs_skills_gin ON jobs USING GIN(skills);
-CREATE INDEX idx_jobs_soft_skills_gin ON jobs USING GIN(soft_skills);
-CREATE INDEX idx_jobs_tools_gin ON jobs USING GIN(tools);
-CREATE INDEX idx_jobs_languages_gin ON jobs USING GIN(languages);
-CREATE INDEX idx_jobs_frameworks_gin ON jobs USING GIN(frameworks);
-CREATE INDEX idx_jobs_libraries_gin ON jobs USING GIN(libraries);
-CREATE INDEX idx_jobs_types_gin ON jobs USING GIN(types);
+CREATE INDEX IF NOT EXISTS idx_jobs_skills_gin ON jobs USING GIN(skills);
+CREATE INDEX IF NOT EXISTS idx_jobs_soft_skills_gin ON jobs USING GIN(soft_skills);
+CREATE INDEX IF NOT EXISTS idx_jobs_tools_gin ON jobs USING GIN(tools);
+CREATE INDEX IF NOT EXISTS idx_jobs_languages_gin ON jobs USING GIN(languages);
+CREATE INDEX IF NOT EXISTS idx_jobs_frameworks_gin ON jobs USING GIN(frameworks);
+CREATE INDEX IF NOT EXISTS idx_jobs_libraries_gin ON jobs USING GIN(libraries);
+CREATE INDEX IF NOT EXISTS idx_jobs_types_gin ON jobs USING GIN(types);
 
 -- Create composite indexes for common query patterns
-CREATE INDEX idx_jobs_country_ai ON jobs(country, ai) WHERE ai = true;
-CREATE INDEX idx_jobs_published_ai ON jobs(published, ai) WHERE ai = true;
-CREATE INDEX idx_jobs_company_published ON jobs(company_slug, published DESC);
-CREATE INDEX idx_jobs_location_skills ON jobs(country, city) INCLUDE (skills);
+CREATE INDEX IF NOT EXISTS idx_jobs_country_ai ON jobs(country, ai) WHERE ai = true;
+CREATE INDEX IF NOT EXISTS idx_jobs_published_ai ON jobs(published, ai) WHERE ai = true;
+CREATE INDEX IF NOT EXISTS idx_jobs_company_published ON jobs(company_slug, published DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_location_skills ON jobs(country, city) INCLUDE (skills);
 
 -- Create indexes for job_skills_detail table
-CREATE INDEX idx_skill_detail_job_slug ON job_skills_detail(job_slug);
-CREATE INDEX idx_skill_detail_name ON job_skills_detail(skill_name);
-CREATE INDEX idx_skill_detail_category ON job_skills_detail(skill_category);
-CREATE INDEX idx_skill_detail_name_category ON job_skills_detail(skill_name, skill_category);
+CREATE INDEX IF NOT EXISTS idx_skill_detail_job_slug ON job_skills_detail(job_slug);
+CREATE INDEX IF NOT EXISTS idx_skill_detail_name ON job_skills_detail(skill_name);
+CREATE INDEX IF NOT EXISTS idx_skill_detail_category ON job_skills_detail(skill_category);
+CREATE INDEX IF NOT EXISTS idx_skill_detail_name_category ON job_skills_detail(skill_name, skill_category);
  
 -- Create partial indexes for specific use cases
 --CREATE INDEX idx_jobs_recent_active ON jobs(published) 
@@ -198,18 +193,20 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers for updated_at
+DROP TRIGGER IF EXISTS update_companies_updated_at ON companies;
 CREATE TRIGGER update_companies_updated_at 
     BEFORE UPDATE ON companies 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_jobs_updated_at ON jobs;
 CREATE TRIGGER update_jobs_updated_at 
     BEFORE UPDATE ON jobs 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
 -- Create view for job listings with company details (useful for frequent queries)
-CREATE VIEW job_listings_with_company AS
+CREATE OR REPLACE VIEW job_listings_with_company AS
 SELECT 
     j.*,
     c.name AS company_name,
@@ -253,16 +250,20 @@ END;
 $$ language 'plpgsql';
 
 -- Create triggers to maintain company job counts
+
+DROP TRIGGER IF EXISTS maintain_company_job_counts_insert ON jobs;
 CREATE TRIGGER maintain_company_job_counts_insert
     AFTER INSERT ON jobs
     FOR EACH ROW
     EXECUTE FUNCTION update_company_job_counts();
 
+DROP TRIGGER IF EXISTS maintain_company_job_counts_delete ON jobs;
 CREATE TRIGGER maintain_company_job_counts_delete
     AFTER DELETE ON jobs
     FOR EACH ROW
     EXECUTE FUNCTION update_company_job_counts();
 
+DROP TRIGGER IF EXISTS maintain_company_job_counts_update ON jobs;
 CREATE TRIGGER maintain_company_job_counts_update
     AFTER UPDATE OF ai ON jobs
     FOR EACH ROW
